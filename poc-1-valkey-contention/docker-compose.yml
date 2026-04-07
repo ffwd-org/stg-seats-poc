@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  valkey:
+    image: valkey/valkey:8.0
+    container_name: valkey
+    ports:
+      - "6379:6379"
+    command: >
+      valkey-server
+      --maxmemory 128mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  valkey-exporter:
+    image: oliver006/valkey_exporter:v1.16.0
+    container_name: valkey-exporter
+    ports:
+      - "9121:9121"
+    environment:
+      VALKEY_ADDR: valkey://valkey:6379
+    depends_on:
+      valkey:
+        condition: service_healthy
+    restart: unless-stopped
