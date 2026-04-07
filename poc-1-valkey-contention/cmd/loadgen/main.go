@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"os"
 	"sort"
@@ -15,56 +16,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"math/rand"
-
 	"github.com/joho/godotenv"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/valkey-io/valkey-go"
+	valkey "github.com/valkey-io/valkey-go"
 
-	"github.com/ffwd-org/stg-seats-poc/pkg/metrics"
+	"github.com/ffwd-org/stg-seats-poc/poc-1-valkey-contention/pkg/metrics"
 )
 
 const pocName = "poc1"
-
-// latencyCollector is a concurrent-safe latency sample store with a cap.
-const maxLatencySamples = 500_000
-
-type latencyCollector struct {
-	mu   sync.Mutex
-	vals []float64
-}
-
-func newLatencyCollector() *latencyCollector {
-	return &latencyCollector{vals: make([]float64, 0, 65536)}
-}
-
-func (l *latencyCollector) reset() {
-	l.mu.Lock()
-	l.vals = l.vals[:0]
-	l.mu.Unlock()
-}
-
-func (l *latencyCollector) add(v float64) {
-	l.mu.Lock()
-	if len(l.vals) < maxLatencySamples {
-		l.vals = append(l.vals, v)
-	}
-	l.mu.Unlock()
-}
-
-func (l *latencyCollector) percentiles() (p50, p95, p99 float64) {
-	l.mu.Lock()
-	cp := make([]float64, len(l.vals))
-	copy(cp, l.vals)
-	l.mu.Unlock()
-
-	if len(cp) == 0 {
-		return 0, 0, 0
-	}
-	sort.Float64s(cp)
-	n := len(cp)
-	return cp[n*50/100], cp[n*95/100], cp[n*99/100]
-}
 
 var (
 	flagMode        string
@@ -77,28 +36,65 @@ var (
 
 	totalOps    atomic.Int64
 	totalErrors atomic.Int64
-	latencies   = newLatencyCollector()
+	latColl     latencyCollector
 )
 
 func init() {
-	metrics.OpsTotal.WithLabelValues(pocName, "ok")
-	metrics.OpsTotal.WithLabelValues(pocName, "error")
-	metrics.LatencyHist.WithLabelValues(pocName, "hold")
+	for _, m := range []string{"hset", "bitfield"} {
+		metrics.OpsTotal.WithLabelValues(pocName, m, "ok")
+		metrics.OpsTotal.WithLabelValues(pocName, m, "error")
+		metrics.LatencyHist.WithLabelValues(pocName, m, "hold")
+	}
 	metrics.ActiveWorkers.WithLabelValues(pocName)
+}
+
+// latencyCollector is a thread-safe store for latency samples (microseconds).
+type latencyCollector struct {
+	mu   sync.Mutex
+	data []uint64
+}
+
+func (lc *latencyCollector) reset() {
+	lc.mu.Lock()
+	lc.data = lc.data[:0]
+	lc.mu.Unlock()
+}
+
+func (lc *latencyCollector) observe(us uint64) {
+	lc.mu.Lock()
+	lc.data = append(lc.data, us)
+	lc.mu.Unlock()
+}
+
+func (lc *latencyCollector) percentiles() (p50, p95, p99 float64) {
+	lc.mu.Lock()
+	vals := make([]uint64, len(lc.data))
+	copy(vals, lc.data)
+	lc.mu.Unlock()
+
+	if len(vals) == 0 {
+		return 0, 0, 0
+	}
+	sort.Slice(vals, func(i, j int) bool { return vals[i] < vals[j] })
+	n := len(vals)
+	// Convert microseconds to milliseconds
+	return float64(vals[n*50/100]) / 1000,
+		float64(vals[n*95/100]) / 1000,
+		float64(vals[n*99/100]) / 1000
 }
 
 type stageResult struct {
 	Workers   int
 	Ops       int64
 	OpsPerSec float64
-	P50       float64
-	P95       float64
-	P99       float64
+	P50       float64 // ms
+	P95       float64 // ms
+	P99       float64 // ms
 	ErrorRate float64
 }
 
 func main() {
-	godotenv.Load()
+	_ = godotenv.Load()
 
 	fs := flag.NewFlagSet("loadgen", flag.ContinueOnError)
 	fs.StringVar(&flagMode, "mode", "", "hset or bitfield (required)")
@@ -106,7 +102,7 @@ func main() {
 	fs.IntVar(&flagSeats, "seats", 100000, "total seat count")
 	fs.StringVar(&flagRamp, "ramp", "100,1000,5000,10000,25000,50000,100000", "comma-separated worker counts")
 	fs.IntVar(&flagMetricsPort, "metrics-port", 2112, "Prometheus metrics port")
-	fs.DurationVar(&flagStageDur, "stage-duration", 60*time.Second, "how long each ramp stage runs")
+	fs.DurationVar(&flagStageDur, "stage-duration", 60*time.Second, "duration per ramp stage")
 	fs.DurationVar(&flagCooldown, "cooldown", 10*time.Second, "pause between stages")
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		slog.Error("flag parse failed", "err", err)
@@ -133,14 +129,14 @@ func main() {
 		addr := fmt.Sprintf(":%d", flagMetricsPort)
 		slog.Info("metrics server listening", "addr", addr)
 		if err := http.ListenAndServe(addr, nil); err != nil {
-			slog.Error("metrics server", "err", err)
+			slog.Error("metrics server error", "err", err)
 		}
 	}()
 
 	ctx := context.Background()
 	client, err := valkey.NewClient(valkey.ClientOption{InitAddress: []string{flagValkeyAddr}})
 	if err != nil {
-		slog.Error("valkey client", "err", err)
+		slog.Error("valkey client init failed", "err", err)
 		os.Exit(1)
 	}
 	defer client.Close()
@@ -151,7 +147,11 @@ func main() {
 
 	results := make([]stageResult, 0, len(workerCounts))
 	for i, workers := range workerCounts {
-		slog.Info("stage start", "stage", i+1, "of", len(workerCounts), "workers", workers)
+		slog.Info("starting stage",
+			"stage", i+1,
+			"total_stages", len(workerCounts),
+			"workers", workers,
+		)
 		res := runStage(ctx, client, workers, scripts)
 		results = append(results, res)
 		printStageResult(res)
@@ -173,12 +173,12 @@ func runStage(ctx context.Context, client valkey.Client, nWorkers int, scripts *
 	stageCtx, cancel := context.WithTimeout(ctx, flagStageDur)
 	defer cancel()
 
-	latencies.reset()
+	latColl.reset()
 	totalOps.Store(0)
 	totalErrors.Store(0)
 
 	start := time.Now()
-	reportDone := make(chan struct{})
+	stopReport := make(chan struct{})
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
@@ -187,10 +187,13 @@ func runStage(ctx context.Context, client valkey.Client, nWorkers int, scripts *
 			case <-ticker.C:
 				elapsed := time.Since(start).Seconds()
 				ops := totalOps.Load()
-				slog.Info("progress", "elapsed_s", fmt.Sprintf("%.0f", elapsed),
-					"ops", ops, "ops_per_s", fmt.Sprintf("%.0f", float64(ops)/elapsed),
-					"errors", totalErrors.Load())
-			case <-reportDone:
+				slog.Info("progress",
+					"elapsed_s", fmt.Sprintf("%.0f", elapsed),
+					"ops", ops,
+					"ops_per_sec", fmt.Sprintf("%.0f", float64(ops)/elapsed),
+					"errors", totalErrors.Load(),
+				)
+			case <-stopReport:
 				return
 			}
 		}
@@ -205,7 +208,7 @@ func runStage(ctx context.Context, client valkey.Client, nWorkers int, scripts *
 		}(i)
 	}
 	wg.Wait()
-	close(reportDone)
+	close(stopReport)
 
 	elapsed := time.Since(start)
 	total := totalOps.Load() + totalErrors.Load()
@@ -215,7 +218,7 @@ func runStage(ctx context.Context, client valkey.Client, nWorkers int, scripts *
 	}
 
 	opsPerSec := float64(totalOps.Load()) / elapsed.Seconds()
-	p50, p95, p99 := latencies.percentiles()
+	p50, p95, p99 := latColl.percentiles()
 
 	metrics.ActiveWorkers.WithLabelValues(pocName).Set(0)
 
@@ -232,8 +235,6 @@ func runStage(ctx context.Context, client valkey.Client, nWorkers int, scripts *
 
 func runWorker(ctx context.Context, client valkey.Client, workerID int, scripts *loadedScripts) {
 	r := rand.New(rand.NewSource(int64(workerID)))
-	key := keyForMode(flagMode)
-	workerToken := fmt.Sprintf("worker-%d", workerID)
 
 	for {
 		select {
@@ -243,53 +244,56 @@ func runWorker(ctx context.Context, client valkey.Client, workerID int, scripts 
 		}
 
 		seatIdx := r.Intn(flagSeats)
-		seatID := fmt.Sprintf("seat:%05d", seatIdx+1)
-
 		opStart := time.Now()
-		var resp valkey.ValkeyResult
 
-		if flagMode == "hset" {
-			resp = scripts.holdHSET.Exec(ctx, client,
+		var success bool
+		var execErr error
+
+		switch flagMode {
+		case "hset":
+			key := "seats:event:1"
+			seatID := fmt.Sprintf("seat:%05d", seatIdx+1)
+			res := scripts.holdHSET.Exec(ctx, client,
 				[]string{key},
-				[]string{seatID, workerToken, "60", strconv.FormatInt(time.Now().Unix(), 10)},
+				[]string{seatID, fmt.Sprintf("worker-%d", workerID), "60", strconv.FormatInt(time.Now().Unix(), 10)},
 			)
-		} else {
-			resp = scripts.holdBitfield.Exec(ctx, client,
-				[]string{key, key + ":holders"},
-				[]string{strconv.Itoa(seatIdx), workerToken},
+			execErr = res.Error()
+			if execErr == nil {
+				if arr, err := res.ToArray(); err == nil && len(arr) > 0 {
+					v, _ := arr[0].ToInt64()
+					success = v == 1
+				}
+			}
+		case "bitfield":
+			bitsKey := "seats:event:1:bits"
+			holdersKey := "seats:event:1:holders"
+			res := scripts.holdBitfield.Exec(ctx, client,
+				[]string{bitsKey, holdersKey},
+				[]string{strconv.Itoa(seatIdx), fmt.Sprintf("worker-%d", workerID)},
 			)
+			execErr = res.Error()
+			if execErr == nil {
+				if arr, err := res.ToArray(); err == nil && len(arr) > 0 {
+					v, _ := arr[0].ToInt64()
+					success = v == 1
+				}
+			}
 		}
 
-		latency := time.Since(opStart).Seconds()
+		latencyUs := uint64(time.Since(opStart).Microseconds())
+		latColl.observe(latencyUs)
+		latencySec := float64(latencyUs) / 1e6
 
-		if err := resp.Error(); err != nil {
+		if execErr != nil || !success {
 			totalErrors.Add(1)
-			metrics.OpsTotal.WithLabelValues(pocName, "error").Inc()
+			metrics.OpsTotal.WithLabelValues(pocName, flagMode, "error").Inc()
 			time.Sleep(time.Millisecond)
 			continue
 		}
 
-		arr, err := resp.ToArray()
-		if err != nil || len(arr) == 0 {
-			totalErrors.Add(1)
-			metrics.OpsTotal.WithLabelValues(pocName, "error").Inc()
-			time.Sleep(time.Millisecond)
-			continue
-		}
-
-		code, _ := arr[0].ToInt64()
-		if code == 0 {
-			// seat_unavailable — expected under contention, not a fatal error
-			totalErrors.Add(1)
-			metrics.OpsTotal.WithLabelValues(pocName, "error").Inc()
-			time.Sleep(time.Millisecond)
-			continue
-		}
-
-		latencies.add(latency)
 		totalOps.Add(1)
-		metrics.OpsTotal.WithLabelValues(pocName, "ok").Inc()
-		metrics.LatencyHist.WithLabelValues(pocName, "hold").Observe(latency)
+		metrics.OpsTotal.WithLabelValues(pocName, flagMode, "ok").Inc()
+		metrics.LatencyHist.WithLabelValues(pocName, flagMode, "hold").Observe(latencySec)
 	}
 }
 
@@ -301,12 +305,12 @@ type loadedScripts struct {
 func loadScripts() *loadedScripts {
 	hsetSrc, err := os.ReadFile("lua/hold_hset.lua")
 	if err != nil {
-		slog.Error("failed to read hold_hset.lua", "err", err)
+		slog.Error("failed to read lua/hold_hset.lua", "err", err)
 		os.Exit(1)
 	}
 	bitfieldSrc, err := os.ReadFile("lua/hold_bitfield.lua")
 	if err != nil {
-		slog.Error("failed to read hold_bitfield.lua", "err", err)
+		slog.Error("failed to read lua/hold_bitfield.lua", "err", err)
 		os.Exit(1)
 	}
 	return &loadedScripts{
@@ -315,52 +319,47 @@ func loadScripts() *loadedScripts {
 	}
 }
 
-func keyForMode(mode string) string {
-	switch mode {
-	case "hset":
-		return "seats:event:1"
-	case "bitfield":
-		return "seats:event:1:bits"
-	default:
-		return "seats:event:1"
-	}
-}
-
 func printStageResult(r stageResult) {
 	slog.Info("stage result",
 		"workers", r.Workers,
 		"ops", r.Ops,
 		"ops_per_sec", fmt.Sprintf("%.0f", r.OpsPerSec),
-		"p50_ms", fmt.Sprintf("%.3f", r.P50*1000),
-		"p95_ms", fmt.Sprintf("%.3f", r.P95*1000),
-		"p99_ms", fmt.Sprintf("%.3f", r.P99*1000),
+		"p50_ms", fmt.Sprintf("%.4f", r.P50),
+		"p95_ms", fmt.Sprintf("%.4f", r.P95),
+		"p99_ms", fmt.Sprintf("%.4f", r.P99),
 		"error_rate_pct", fmt.Sprintf("%.2f", r.ErrorRate*100),
 	)
 }
 
 func writeCSV(results []stageResult, mode string) {
-	os.MkdirAll("results", 0755)
+	if err := os.MkdirAll("results", 0755); err != nil {
+		slog.Error("mkdir results failed", "err", err)
+		return
+	}
 	fname := fmt.Sprintf("results/%s-run.csv", mode)
 	f, err := os.OpenFile(fname, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 	if err != nil {
-		slog.Error("csv write error", "err", err)
+		slog.Error("csv open failed", "file", fname, "err", err)
 		return
 	}
 	defer f.Close()
 	w := csv.NewWriter(f)
-	_ = w.Write([]string{"workers", "ops", "ops_per_sec", "p50_s", "p95_s", "p99_s", "error_rate"})
+	_ = w.Write([]string{"workers", "ops", "ops_per_sec", "p50_ms", "p95_ms", "p99_ms", "error_rate"})
 	for _, r := range results {
 		_ = w.Write([]string{
 			strconv.Itoa(r.Workers),
 			strconv.FormatInt(r.Ops, 10),
 			fmt.Sprintf("%.2f", r.OpsPerSec),
-			fmt.Sprintf("%.6f", r.P50),
-			fmt.Sprintf("%.6f", r.P95),
-			fmt.Sprintf("%.6f", r.P99),
+			fmt.Sprintf("%.4f", r.P50),
+			fmt.Sprintf("%.4f", r.P95),
+			fmt.Sprintf("%.4f", r.P99),
 			fmt.Sprintf("%.6f", r.ErrorRate),
 		})
 	}
 	w.Flush()
+	if err := w.Error(); err != nil {
+		slog.Error("csv flush error", "err", err)
+	}
 }
 
 func envOr(key, fallback string) string {

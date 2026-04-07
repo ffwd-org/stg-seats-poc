@@ -3,7 +3,6 @@ module github.com/ffwd-org/stg-seats-poc/poc-1-valkey-contention
 go 1.24.9
 
 require (
-	github.com/ffwd-org/stg-seats-poc v0.0.0
 	github.com/joho/godotenv v1.5.1
 	github.com/prometheus/client_golang v1.20.5
 	github.com/valkey-io/valkey-go v1.0.73
@@ -20,5 +19,3 @@ require (
 	golang.org/x/sys v0.39.0 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 )
-
-replace github.com/ffwd-org/stg-seats-poc => ../
