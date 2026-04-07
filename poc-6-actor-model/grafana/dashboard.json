@@ -1,0 +1,113 @@
+{
+  "annotations": {"list": [{"builtIn": 1, "enable": true, "hide": true, "iconColor": "rgba(0,211,255,1)", "name": "Annotations & Alerts", "type": "dashboard"}]},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "id": 1, "title": "Throughput", "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Elixir GenServer hold operations per second",
+      "fieldConfig": {"defaults": {"color": {"fixedColor": "purple", "mode": "fixed"}, "unit": "ops", "min": 0}},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 1},
+      "id": 2,
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "rate(poc_ops_total{poc=\"poc6\",result=\"ok\"}[5s])", "legendFormat": "ops/sec", "refId": "A"}
+      ],
+      "title": "GenServer OPS/sec",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Actor process count — one per section",
+      "fieldConfig": {"defaults": {"color": {"fixedColor": "yellow", "mode": "fixed"}, "unit": "none", "min": 0}},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 1},
+      "id": 3,
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "erlang_process_count", "legendFormat": "processes", "refId": "A"}
+      ],
+      "title": "Erlang Process Count",
+      "type": "timeseries"
+    },
+    {
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 9},
+      "id": 4, "title": "Latency", "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Hold operation latency p50/p95/p99",
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "palette-classic"}, "unit": "s", "min": 0},
+        "overrides": [
+          {"matcher": {"id": "byRegexp", "options": ".*p50.*"}, "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]},
+          {"matcher": {"id": "byRegexp", "options": ".*p95.*"}, "properties": [{"id": "color", "value": {"fixedColor": "yellow", "mode": "fixed"}}]},
+          {"matcher": {"id": "byRegexp", "options": ".*p99.*"}, "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]}
+        ]
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 10},
+      "id": 5,
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.50, rate(poc_latency_seconds_bucket{poc=\"poc6\"}[10s]))", "legendFormat": "p50", "refId": "A"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, rate(poc_latency_seconds_bucket{poc=\"poc6\"}[10s]))", "legendFormat": "p95", "refId": "B"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.99, rate(poc_latency_seconds_bucket{poc=\"poc6\"}[10s]))", "legendFormat": "p99", "refId": "C"}
+      ],
+      "title": "GenServer Hold Latency (p50/p95/p99)",
+      "type": "timeseries"
+    },
+    {
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 18},
+      "id": 6, "title": "BEAM VM", "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "BEAM process reductions (low = good scheduling)",
+      "fieldConfig": {"defaults": {"color": {"fixedColor": "blue", "mode": "fixed"}, "unit": "none"}},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 19},
+      "id": 7,
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "rate(erlang_reductions[10s])", "legendFormat": "reductions/s", "refId": "A"}
+      ],
+      "title": "Erlang Reductions/sec",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "BEAM memory usage",
+      "fieldConfig": {"defaults": {"color": {"fixedColor": "blue", "mode": "fixed"}, "unit": "bytes", "min": 0}},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 19},
+      "id": 8,
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "erlang_memory_bytes", "legendFormat": "BEAM RSS", "refId": "A"}
+      ],
+      "title": "BEAM Memory",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Mailbox queue lengths — backpressure signal",
+      "fieldConfig": {"defaults": {"color": {"fixedColor": "red", "mode": "fixed"}, "unit": "none", "min": 0}},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 19},
+      "id": 9,
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "erlang_processes_status", "legendFormat": "processes", "refId": "A"}
+      ],
+      "title": "Process Status",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "tags": ["stg-seats", "poc6", "elixir"],
+  "templating": {"list": []},
+  "time": {"from": "now-15m", "to": "now"},
+  "timezone": "browser",
+  "title": "POC 6 — Elixir/BEAM Actor Model",
+  "uid": "poc6-actor-model",
+  "version": 1
+}
