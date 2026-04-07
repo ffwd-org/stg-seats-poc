@@ -1,0 +1,50 @@
+{
+  "token_hmac_key": "placeholder-secret-change-in-production",
+  "api_key": "placeholder-api-key",
+  "namespace": "stg-seats",
+  "channel_prefix": "stg-seats",
+  "redis_host": "10.10.0.x",
+  "redis_port": 6379,
+  "redis_password": "",
+  "redis_db": 0,
+  "redis_master_name": "",
+  "redis_sentinel_master_set": "",
+  "redis_username": "",
+  "redis_tls": false,
+  "redis_tls_insecure": false,
+  "engine": "redis",
+  "allowed_origins": ["*"],
+  "no_internal_username": false,
+  "proxy_http": false,
+  "proxy_auth": false,
+  "presence": true,
+  "history_meta_ttl": 86400,
+  "history_size": 1000,
+  "history_lifetime": 3600,
+  "history_recover": false,
+  "subscribe_recover": false,
+  "server": false,
+  "namespaces": [
+    {
+      "name": "stg-seats",
+      "channel_options": {
+        "presence": true,
+        "history_size": 100,
+        "history_lifetime": 300
+      }
+    }
+  ],
+  "grafana_url": "",
+  "prometheus": true,
+  "prometheus_path": "/metrics",
+  "debug": false,
+  "log_level": "info",
+  "log_file": "",
+  "port": 8000,
+  "web": false,
+  "health": true,
+  "admin": false,
+  "admin_password": "changeme",
+  "admin_secret": "changeme",
+  "admin_channel": "$internal.centrifugo.admin"
+}
