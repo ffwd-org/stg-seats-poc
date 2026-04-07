@@ -1,0 +1,15 @@
+services:
+  nats:
+    image: nats:2.10
+    container_name: nats
+    command: ["-js"]  # Enable JetStream
+    ports:
+      - "4222:4222"   # Client connections
+      - "8222:8222"   # Monitoring
+    environment:
+      - NATS_SERVER_NAME=nats-poc4
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
