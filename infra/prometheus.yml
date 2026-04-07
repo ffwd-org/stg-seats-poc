@@ -1,0 +1,23 @@
+global:
+  scrape_interval: 1s
+  evaluation_interval: 1s
+
+scrape_configs:
+  # Valkey exporter (from valkey-exporter sidecar)
+  - job_name: 'valkey'
+    static_configs:
+      - targets: ['valkey-exporter:9121']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+
+  # Load generator metrics (Go Prometheus endpoint)
+  - job_name: 'loadgen'
+    static_configs:
+      - targets: ['loadgen:2112']
+    metrics_path: /metrics
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
