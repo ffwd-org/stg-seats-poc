@@ -14,12 +14,11 @@ import (
 	"runtime"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/adaptor"
 	"github.com/joho/godotenv"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/valkey-io/valkey-go"
@@ -30,8 +29,6 @@ import (
 const pocName = "poc1"
 
 var (
-	flagWorkers      int
-	flagDuration     time.Duration
 	flagMode         string
 	flagValkeyAddr   string
 	flagSeats        int
@@ -42,12 +39,11 @@ var (
 
 	totalOps    atomic.Int64
 	totalErrors atomic.Int64
-	latencies   atomic.Uint64Slice // guarded by sort mutex
+	latencies   atomic.Uint64Slice
 	sortMu      sync.Mutex
 )
 
 func init() {
-	// Register Prometheus metrics
 	metrics.OpsTotal.WithLabelValues(pocName, "ok")
 	metrics.OpsTotal.WithLabelValues(pocName, "error")
 	metrics.LatencyHist.WithLabelValues(pocName, "hold")
@@ -55,21 +51,19 @@ func init() {
 }
 
 type stageResult struct {
-	Workers    int
-	Ops        int64
-	OpsPerSec  float64
-	P50        float64
-	P95        float64
-	P99        float64
-	ErrorRate  float64
+	Workers   int
+	Ops       int64
+	OpsPerSec float64
+	P50       float64
+	P95       float64
+	P99       float64
+	ErrorRate float64
 }
 
 func main() {
 	godotenv.Load()
 
 	fs := flag.NewFlagSet("loadgen", flag.ContinueOnError)
-	fs.IntVar(&flagWorkers, "workers", 1000, "concurrent goroutines per stage")
-	fs.DurationVar(&flagDuration, "duration", 60*time.Second, "test duration per stage")
 	fs.StringVar(&flagMode, "mode", "", "hset or bitfield (required)")
 	fs.StringVar(&flagValkeyAddr, "valkey-addr", envOr("VALKEY_ADDR", "localhost:6379"), "Valkey address")
 	fs.IntVar(&flagSeats, "seats", 100000, "total seat count")
@@ -85,9 +79,8 @@ func main() {
 		log.Fatal("--mode is required (hset or bitfield)")
 	}
 
-	// Parse ramp stages
 	var workerCounts []int
-	for _, s := range splitComma(flagRamp) {
+	for _, s := range strings.Split(flagRamp, ",") {
 		n, err := strconv.Atoi(strings.TrimSpace(s))
 		if err != nil {
 			log.Fatalf("invalid worker count in --ramp: %s", s)
@@ -95,7 +88,6 @@ func main() {
 		workerCounts = append(workerCounts, n)
 	}
 
-	// Start Prometheus metrics server
 	go func() {
 		http.Handle("/metrics", promhttp.Handler())
 		addr := fmt.Sprintf(":%d", flagMetricsPort)
@@ -112,8 +104,7 @@ func main() {
 	}
 	defer client.Close()
 
-	// Load Lua scripts
-	scripts := loadScripts(client, flagMode)
+	scripts := loadScripts()
 
 	log.Printf("Starting POC 1 load test — mode: %s, seats: %d", flagMode, flagSeats)
 	log.Printf("Stages: %v", workerCounts)
@@ -121,11 +112,9 @@ func main() {
 	results := make([]stageResult, 0, len(workerCounts))
 	for i, workers := range workerCounts {
 		fmt.Printf("\n=== Stage %d/%d: %d workers ===\n", i+1, len(workerCounts), workers)
-		res := runStage(ctx, client, workers, scripts, flagMode)
+		res := runStage(ctx, client, workers, scripts)
 		results = append(results, res)
 		printStageResult(res)
-
-		// Write CSV after each stage
 		writeCSV(results, flagMode)
 
 		if i < len(workerCounts)-1 && flagCooldown > 0 {
@@ -138,7 +127,7 @@ func main() {
 	writeCSV(results, flagMode)
 }
 
-func runStage(ctx context.Context, client valkey.Client, nWorkers int, scripts *loadedScripts, mode string) stageResult {
+func runStage(ctx context.Context, client valkey.Client, nWorkers int, scripts *loadedScripts) stageResult {
 	metrics.ActiveWorkers.WithLabelValues(pocName).Set(float64(nWorkers))
 
 	ctx, cancel := context.WithTimeout(ctx, flagStageDur)
@@ -171,7 +160,7 @@ func runStage(ctx context.Context, client valkey.Client, nWorkers int, scripts *
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
-			runWorker(ctx, client, workerID, scripts, mode)
+			runWorker(ctx, client, workerID, scripts)
 		}(i)
 	}
 	wg.Wait()
@@ -200,10 +189,9 @@ func runStage(ctx context.Context, client valkey.Client, nWorkers int, scripts *
 	}
 }
 
-func runWorker(ctx context.Context, client valkey.Client, workerID int, scripts *loadedScripts, mode string) {
+func runWorker(ctx context.Context, client valkey.Client, workerID int, scripts *loadedScripts) {
 	r := rand.New(rand.NewSource(int64(workerID)))
-	key := keyForMode(mode)
-	holdersKey := "seats:event:1:holders"
+	key := keyForMode(flagMode)
 
 	for {
 		select {
@@ -219,19 +207,20 @@ func runWorker(ctx context.Context, client valkey.Client, workerID int, scripts 
 		var result string
 		var err error
 
-		if mode == "hset" {
-			result, err = scripts.holdHSET.Exec(ctx, client, []string{key}, []interface{}{seatID, fmt.Sprintf("worker-%d", workerID), 60, time.Now().Unix()}).ToString()
+		if flagMode == "hset" {
+			result, err = scripts.holdHSET.Exec(ctx, client, []string{key},
+				[]interface{}{seatID, fmt.Sprintf("worker-%d", workerID), 60, time.Now().Unix()}).ToString()
 		} else {
-			result, err = scripts.holdBitfield.Exec(ctx, client, []string{key, holdersKey}, []interface{}{seatIdx, fmt.Sprintf("worker-%d", workerID)}).ToString()
+			result, err = scripts.holdBitfield.Exec(ctx, client, []string{key, key + ":holders"},
+				[]interface{}{seatIdx, fmt.Sprintf("worker-%d", workerID)}).ToString()
 		}
 
 		latency := time.Since(opStart).Seconds()
-		latencies.Append(uint64(latency * 1e6)) // microseconds for precision
+		latencies.Append(uint64(latency * 1e6))
 
 		if err != nil || result == "seat_unavailable" {
 			totalErrors.Add(1)
 			metrics.OpsTotal.WithLabelValues(pocName, "error").Inc()
-			// Brief backoff on contention
 			time.Sleep(1 * time.Millisecond)
 			continue
 		}
@@ -243,11 +232,11 @@ func runWorker(ctx context.Context, client valkey.Client, workerID int, scripts 
 }
 
 type loadedScripts struct {
-	holdHSET    *valkey.Script
+	holdHSET     *valkey.Script
 	holdBitfield *valkey.Script
 }
 
-func loadScripts(client valkey.Client, mode string) *loadedScripts {
+func loadScripts() *loadedScripts {
 	hsetSrc, _ := os.ReadFile("lua/hold_hset.lua")
 	bitfieldSrc, _ := os.ReadFile("lua/hold_bitfield.lua")
 	return &loadedScripts{
@@ -271,7 +260,7 @@ func computePercentiles() (p50, p95, p99 float64) {
 	sortMu.Lock()
 	vals := make([]float64, latencies.Len())
 	for i := range vals {
-		vals[i] = float64(latencies.At(i)) / 1e6 // back to seconds
+		vals[i] = float64(latencies.At(i)) / 1e6
 	}
 	sortMu.Unlock()
 
@@ -311,26 +300,6 @@ func writeCSV(results []stageResult, mode string) {
 		})
 	}
 	w.Flush()
-}
-
-func splitComma(s string) []string {
-	var parts []string
-	quote := false
-	var buf []byte
-	for i := 0; i < len(s); i++ {
-		if s[i] == '"' {
-			quote = !quote
-		} else if s[i] == ',' && !quote {
-			parts = append(parts, string(buf))
-			buf = nil
-		} else {
-			buf = append(buf, s[i])
-		}
-	}
-	if len(buf) > 0 {
-		parts = append(parts, string(buf))
-	}
-	return parts
 }
 
 func envOr(key, fallback string) string {
