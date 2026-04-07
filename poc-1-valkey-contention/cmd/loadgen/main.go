@@ -1,5 +1,3 @@
-//go:build ignore
-
 package main
 
 import (
@@ -7,11 +5,10 @@ import (
 	"encoding/csv"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"math/rand"
 	"net/http"
 	"os"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -19,7 +16,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/joho/godotenv"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/valkey-io/valkey-go"
 
@@ -28,242 +24,133 @@ import (
 
 const pocName = "poc1"
 
-var (
-	flagMode         string
-	flagValkeyAddr   string
-	flagSeats        int
-	flagRamp         string
-	flagMetricsPort  int
-	flagStageDur     time.Duration
-	flagCooldown     time.Duration
-
-	totalOps    atomic.Int64
-	totalErrors atomic.Int64
-	latencies   atomic.Uint64Slice
-	sortMu      sync.Mutex
-)
-
-func init() {
-	metrics.OpsTotal.WithLabelValues(pocName, "ok")
-	metrics.OpsTotal.WithLabelValues(pocName, "error")
-	metrics.LatencyHist.WithLabelValues(pocName, "hold")
-	metrics.ActiveWorkers.WithLabelValues(pocName)
-}
-
-type stageResult struct {
-	Workers   int
-	Ops       int64
-	OpsPerSec float64
-	P50       float64
-	P95       float64
-	P99       float64
-	ErrorRate float64
-}
-
 func main() {
-	godotenv.Load()
+	if err := run(os.Args[1:]); err != nil {
+		slog.Error("loadgen failed", "err", err)
+		os.Exit(1)
+	}
+}
 
+func run(args []string) error {
 	fs := flag.NewFlagSet("loadgen", flag.ContinueOnError)
-	fs.StringVar(&flagMode, "mode", "", "hset or bitfield (required)")
-	fs.StringVar(&flagValkeyAddr, "valkey-addr", envOr("VALKEY_ADDR", "localhost:6379"), "Valkey address")
-	fs.IntVar(&flagSeats, "seats", 100000, "total seat count")
-	fs.StringVar(&flagRamp, "ramp", "100,1000,5000,10000,25000,50000,100000", "comma-separated worker counts")
-	fs.IntVar(&flagMetricsPort, "metrics-port", 2112, "Prometheus metrics port")
-	fs.DurationVar(&flagStageDur, "stage-duration", 60*time.Second, "how long each ramp stage runs")
-	fs.DurationVar(&flagCooldown, "cooldown", 10*time.Second, "pause between stages")
-	if err := fs.Parse(os.Args[1:]); err != nil {
-		log.Fatal(err)
+	mode := fs.String("mode", "", "hset or bitfield (required)")
+	valkeyAddr := fs.String("valkey-addr", envOr("VALKEY_ADDR", "localhost:6379"), "Valkey address")
+	seats := fs.Int("seats", 100000, "total seat count")
+	ramp := fs.String("ramp", "100,1000,5000,10000,25000,50000,100000", "comma-separated worker counts")
+	metricsPort := fs.Int("metrics-port", 2112, "Prometheus metrics port")
+	stageDur := fs.Duration("stage-duration", 60*time.Second, "duration per ramp stage")
+	cooldown := fs.Duration("cooldown", 10*time.Second, "pause between stages")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *mode == "" {
+		return fmt.Errorf("--mode is required (hset or bitfield)")
 	}
 
-	if flagMode == "" {
-		log.Fatal("--mode is required (hset or bitfield)")
-	}
-
-	var workerCounts []int
-	for _, s := range strings.Split(flagRamp, ",") {
-		n, err := strconv.Atoi(strings.TrimSpace(s))
-		if err != nil {
-			log.Fatalf("invalid worker count in --ramp: %s", s)
-		}
-		workerCounts = append(workerCounts, n)
+	workerCounts, err := parseRamp(*ramp)
+	if err != nil {
+		return fmt.Errorf("parsing --ramp: %w", err)
 	}
 
 	go func() {
-		http.Handle("/metrics", promhttp.Handler())
-		addr := fmt.Sprintf(":%d", flagMetricsPort)
-		log.Printf("Metrics server listening on %s", addr)
-		if err := http.ListenAndServe(addr, nil); err != nil {
-			log.Printf("metrics server: %v", err)
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", promhttp.Handler())
+		addr := fmt.Sprintf(":%d", *metricsPort)
+		slog.Info("metrics server listening", "addr", addr)
+		if err := http.ListenAndServe(addr, mux); err != nil {
+			slog.Error("metrics server error", "err", err)
 		}
 	}()
 
 	ctx := context.Background()
-	client, err := valkey.NewClient(valkey.Option{InitAddress: []string{flagValkeyAddr}})
+	client, err := valkey.NewClient(valkey.ClientOption{
+		InitAddress: []string{*valkeyAddr},
+	})
 	if err != nil {
-		log.Fatalf("valkey client: %v", err)
+		return fmt.Errorf("valkey client: %w", err)
 	}
 	defer client.Close()
 
-	scripts := loadScripts()
+	scripts, err := loadScripts()
+	if err != nil {
+		return fmt.Errorf("loading scripts: %w", err)
+	}
 
-	log.Printf("Starting POC 1 load test — mode: %s, seats: %d", flagMode, flagSeats)
-	log.Printf("Stages: %v", workerCounts)
+	if err := client.Do(ctx, client.B().Ping().Build()).Error(); err != nil {
+		return fmt.Errorf("valkey ping: %w", err)
+	}
 
-	results := make([]stageResult, 0, len(workerCounts))
+	// Pre-register label sets.
+	// OpsTotal uses labels {"poc", "result"} per pkg/metrics/reporter.go
+	// LatencyHist uses labels {"poc", "operation"} per pkg/metrics/reporter.go
+	// ActiveWorkers uses labels {"poc"}
+	metrics.OpsTotal.WithLabelValues(pocName, "ok")
+	metrics.OpsTotal.WithLabelValues(pocName, "error")
+	metrics.OpsTotal.WithLabelValues(pocName, "contention")
+	metrics.LatencyHist.WithLabelValues(pocName, "hold")
+	metrics.ActiveWorkers.WithLabelValues(pocName)
+
+	slog.Info("starting load test", "mode", *mode, "seats", *seats, "stages", workerCounts)
+
+	var results []stageResult
 	for i, workers := range workerCounts {
-		fmt.Printf("\n=== Stage %d/%d: %d workers ===\n", i+1, len(workerCounts), workers)
-		res := runStage(ctx, client, workers, scripts)
+		slog.Info("starting stage", "stage", i+1, "of", len(workerCounts), "workers", workers)
+		res := runStage(ctx, client, workers, scripts, *mode, *seats, *stageDur)
 		results = append(results, res)
 		printStageResult(res)
-		writeCSV(results, flagMode)
+		writeCSV(results, *mode)
 
-		if i < len(workerCounts)-1 && flagCooldown > 0 {
-			log.Printf("Cooldown for %s...", flagCooldown)
-			time.Sleep(flagCooldown)
+		if i < len(workerCounts)-1 && *cooldown > 0 {
+			slog.Info("cooldown", "duration", *cooldown)
+			time.Sleep(*cooldown)
 		}
 	}
 
-	fmt.Println("\n=== ALL STAGES COMPLETE ===")
-	writeCSV(results, flagMode)
+	slog.Info("all stages complete")
+	return nil
 }
 
-func runStage(ctx context.Context, client valkey.Client, nWorkers int, scripts *loadedScripts) stageResult {
-	metrics.ActiveWorkers.WithLabelValues(pocName).Set(float64(nWorkers))
-
-	ctx, cancel := context.WithTimeout(ctx, flagStageDur)
-	defer cancel()
-
-	latencies.Reset()
-	totalOps.Store(0)
-	totalErrors.Store(0)
-
-	start := time.Now()
-	reportDone := make(chan struct{})
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				elapsed := time.Since(start).Seconds()
-				ops := totalOps.Load()
-				fmt.Printf("  [%.0fs] ops=%d ops/s=%.0f errors=%d\n",
-					elapsed, ops, float64(ops)/elapsed, totalErrors.Load())
-			case <-reportDone:
-				return
-			}
-		}
-	}()
-
-	var wg sync.WaitGroup
-	for i := 0; i < nWorkers; i++ {
-		wg.Add(1)
-		go func(workerID int) {
-			defer wg.Done()
-			runWorker(ctx, client, workerID, scripts)
-		}(i)
-	}
-	wg.Wait()
-	close(reportDone)
-
-	elapsed := time.Since(start)
-	total := totalOps.Load() + totalErrors.Load()
-	errRate := 0.0
-	if total > 0 {
-		errRate = float64(totalErrors.Load()) / float64(total)
-	}
-
-	opsPerSec := float64(totalOps.Load()) / elapsed.Seconds()
-	p50, p95, p99 := computePercentiles()
-
-	metrics.ActiveWorkers.WithLabelValues(pocName).Set(0)
-
-	return stageResult{
-		Workers:   nWorkers,
-		Ops:       totalOps.Load(),
-		OpsPerSec: opsPerSec,
-		P50:       p50,
-		P95:       p95,
-		P99:       p99,
-		ErrorRate: errRate,
-	}
+type stageResult struct {
+	Workers      int
+	DurationSec  float64
+	TotalOps     int64
+	OpsPerSec    float64
+	P50Ms        float64
+	P95Ms        float64
+	P99Ms        float64
+	Errors       int64
+	ValkeyCPUPct float64
 }
 
-func runWorker(ctx context.Context, client valkey.Client, workerID int, scripts *loadedScripts) {
-	r := rand.New(rand.NewSource(int64(workerID)))
-	key := keyForMode(flagMode)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		seatIdx := r.Intn(flagSeats)
-		seatID := fmt.Sprintf("seat:%05d", seatIdx+1)
-
-		opStart := time.Now()
-		var result string
-		var err error
-
-		if flagMode == "hset" {
-			result, err = scripts.holdHSET.Exec(ctx, client, []string{key},
-				[]interface{}{seatID, fmt.Sprintf("worker-%d", workerID), 60, time.Now().Unix()}).ToString()
-		} else {
-			result, err = scripts.holdBitfield.Exec(ctx, client, []string{key, key + ":holders"},
-				[]interface{}{seatIdx, fmt.Sprintf("worker-%d", workerID)}).ToString()
-		}
-
-		latency := time.Since(opStart).Seconds()
-		latencies.Append(uint64(latency * 1e6))
-
-		if err != nil || result == "seat_unavailable" {
-			totalErrors.Add(1)
-			metrics.OpsTotal.WithLabelValues(pocName, "error").Inc()
-			time.Sleep(1 * time.Millisecond)
-			continue
-		}
-
-		totalOps.Add(1)
-		metrics.OpsTotal.WithLabelValues(pocName, "ok").Inc()
-		metrics.LatencyHist.WithLabelValues(pocName, "hold").Observe(latency)
-	}
+type latencyStore struct {
+	mu      sync.Mutex
+	samples []float64
+	cap     int
 }
 
-type loadedScripts struct {
-	holdHSET     *valkey.Script
-	holdBitfield *valkey.Script
+func newLatencyStore(cap int) *latencyStore {
+	return &latencyStore{samples: make([]float64, 0, cap), cap: cap}
 }
 
-func loadScripts() *loadedScripts {
-	hsetSrc, _ := os.ReadFile("lua/hold_hset.lua")
-	bitfieldSrc, _ := os.ReadFile("lua/hold_bitfield.lua")
-	return &loadedScripts{
-		holdHSET:     valkey.NewScript(string(hsetSrc)),
-		holdBitfield: valkey.NewScript(string(bitfieldSrc)),
+func (s *latencyStore) add(v float64) {
+	s.mu.Lock()
+	if len(s.samples) < s.cap {
+		s.samples = append(s.samples, v)
 	}
+	s.mu.Unlock()
 }
 
-func keyForMode(mode string) string {
-	switch mode {
-	case "hset":
-		return "seats:event:1"
-	case "bitfield":
-		return "seats:event:1:bits"
-	default:
-		return "seats:event:1"
-	}
+func (s *latencyStore) reset() {
+	s.mu.Lock()
+	s.samples = s.samples[:0]
+	s.mu.Unlock()
 }
 
-func computePercentiles() (p50, p95, p99 float64) {
-	sortMu.Lock()
-	vals := make([]float64, latencies.Len())
-	for i := range vals {
-		vals[i] = float64(latencies.At(i)) / 1e6
-	}
-	sortMu.Unlock()
-
+func (s *latencyStore) percentiles() (p50, p95, p99 float64) {
+	s.mu.Lock()
+	vals := make([]float64, len(s.samples))
+	copy(vals, s.samples)
+	s.mu.Unlock()
 	if len(vals) == 0 {
 		return 0, 0, 0
 	}
@@ -272,34 +159,253 @@ func computePercentiles() (p50, p95, p99 float64) {
 	return vals[n*50/100], vals[n*95/100], vals[n*99/100]
 }
 
+var lats = newLatencyStore(2_000_000)
+
+func runStage(ctx context.Context, client valkey.Client, nWorkers int, scripts *loadedScripts, mode string, seatCount int, dur time.Duration) stageResult {
+	metrics.ActiveWorkers.WithLabelValues(pocName).Set(float64(nWorkers))
+	lats.reset()
+
+	var totalOps, totalErrors atomic.Int64
+
+	cpuBefore := getValkeyCPU(ctx, client)
+	start := time.Now()
+
+	stageCtx, cancel := context.WithTimeout(ctx, dur)
+	defer cancel()
+
+	doneCh := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				elapsed := time.Since(start).Seconds()
+				ops := totalOps.Load()
+				slog.Info("progress",
+					"elapsed_s", fmt.Sprintf("%.0f", elapsed),
+					"ops", ops,
+					"ops_s", fmt.Sprintf("%.0f", float64(ops)/elapsed),
+					"errors", totalErrors.Load(),
+				)
+			case <-doneCh:
+				return
+			}
+		}
+	}()
+
+	var wg sync.WaitGroup
+	for i := 0; i < nWorkers; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			runWorker(stageCtx, client, id, scripts, mode, seatCount, &totalOps, &totalErrors)
+		}(i)
+	}
+	wg.Wait()
+	close(doneCh)
+
+	elapsed := time.Since(start)
+	cpuAfter := getValkeyCPU(ctx, client)
+	cpuPct := 0.0
+	if elapsed.Seconds() > 0 && cpuAfter > cpuBefore {
+		cpuPct = ((cpuAfter - cpuBefore) / elapsed.Seconds()) * 100
+	}
+
+	ops := totalOps.Load()
+	errs := totalErrors.Load()
+	p50, p95, p99 := lats.percentiles()
+
+	metrics.ActiveWorkers.WithLabelValues(pocName).Set(0)
+
+	return stageResult{
+		Workers:      nWorkers,
+		DurationSec:  elapsed.Seconds(),
+		TotalOps:     ops,
+		OpsPerSec:    float64(ops) / elapsed.Seconds(),
+		P50Ms:        p50 * 1000,
+		P95Ms:        p95 * 1000,
+		P99Ms:        p99 * 1000,
+		Errors:       errs,
+		ValkeyCPUPct: cpuPct,
+	}
+}
+
+func runWorker(ctx context.Context, client valkey.Client, workerID int, scripts *loadedScripts, mode string, seatCount int, totalOps, totalErrors *atomic.Int64) {
+	r := rand.New(rand.NewSource(int64(workerID) ^ time.Now().UnixNano()))
+	holderID := fmt.Sprintf("worker-%d", workerID)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		seatIdx := r.Intn(seatCount)
+		opStart := time.Now()
+
+		var code int64
+		var execErr error
+
+		switch mode {
+		case "hset":
+			res := scripts.holdHSET.Exec(ctx, client,
+				[]string{"seats:event:1"},
+				[]string{
+					fmt.Sprintf("seat:%05d", seatIdx+1),
+					holderID,
+					"60",
+					strconv.FormatInt(time.Now().Unix(), 10),
+				},
+			)
+			if execErr = res.Error(); execErr == nil {
+				arr, e := res.ToArray()
+				if e != nil {
+					execErr = e
+				} else if len(arr) > 0 {
+					code, _ = arr[0].ToInt64()
+				}
+			}
+		case "bitfield":
+			res := scripts.holdBitfield.Exec(ctx, client,
+				[]string{"seats:event:1:bits", "seats:event:1:holders"},
+				[]string{strconv.Itoa(seatIdx), holderID},
+			)
+			if execErr = res.Error(); execErr == nil {
+				arr, e := res.ToArray()
+				if e != nil {
+					execErr = e
+				} else if len(arr) > 0 {
+					code, _ = arr[0].ToInt64()
+				}
+			}
+		}
+
+		latency := time.Since(opStart).Seconds()
+		lats.add(latency)
+		metrics.LatencyHist.WithLabelValues(pocName, "hold").Observe(latency)
+
+		if execErr != nil {
+			totalErrors.Add(1)
+			metrics.OpsTotal.WithLabelValues(pocName, "error").Inc()
+			continue
+		}
+		if code == 0 {
+			metrics.OpsTotal.WithLabelValues(pocName, "contention").Inc()
+			continue
+		}
+
+		totalOps.Add(1)
+		metrics.OpsTotal.WithLabelValues(pocName, "ok").Inc()
+	}
+}
+
+type loadedScripts struct {
+	holdHSET     *valkey.Lua
+	holdBitfield *valkey.Lua
+}
+
+func loadScripts() (*loadedScripts, error) {
+	hsetSrc, err := os.ReadFile("lua/hold_hset.lua")
+	if err != nil {
+		return nil, fmt.Errorf("reading hold_hset.lua: %w", err)
+	}
+	bitfieldSrc, err := os.ReadFile("lua/hold_bitfield.lua")
+	if err != nil {
+		return nil, fmt.Errorf("reading hold_bitfield.lua: %w", err)
+	}
+	return &loadedScripts{
+		holdHSET:     valkey.NewLuaScript(string(hsetSrc)),
+		holdBitfield: valkey.NewLuaScript(string(bitfieldSrc)),
+	}, nil
+}
+
+func getValkeyCPU(ctx context.Context, client valkey.Client) float64 {
+	raw, err := client.Do(ctx, client.B().Arbitrary("INFO", "stats").Build()).ToString()
+	if err != nil {
+		return 0
+	}
+	var cpuSys, cpuUser float64
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(line, "used_cpu_sys:"):
+			fmt.Sscanf(strings.TrimPrefix(line, "used_cpu_sys:"), "%f", &cpuSys)
+		case strings.HasPrefix(line, "used_cpu_user:"):
+			fmt.Sscanf(strings.TrimPrefix(line, "used_cpu_user:"), "%f", &cpuUser)
+		}
+	}
+	return cpuSys + cpuUser
+}
+
 func printStageResult(r stageResult) {
-	fmt.Printf("  Result: ops=%d ops/s=%.0f p50=%.4fs p95=%.4fs p99=%.4fs error_rate=%.2f%%\n",
-		r.Ops, r.OpsPerSec, r.P50, r.P95, r.P99, r.ErrorRate*100)
+	slog.Info("stage result",
+		"workers", r.Workers,
+		"total_ops", r.TotalOps,
+		"ops_per_sec", fmt.Sprintf("%.0f", r.OpsPerSec),
+		"p50_ms", fmt.Sprintf("%.3f", r.P50Ms),
+		"p95_ms", fmt.Sprintf("%.3f", r.P95Ms),
+		"p99_ms", fmt.Sprintf("%.3f", r.P99Ms),
+		"errors", r.Errors,
+		"valkey_cpu_pct", fmt.Sprintf("%.1f", r.ValkeyCPUPct),
+	)
 }
 
 func writeCSV(results []stageResult, mode string) {
-	os.MkdirAll("results", 0755)
+	if err := os.MkdirAll("results", 0o755); err != nil {
+		slog.Error("mkdir results", "err", err)
+		return
+	}
 	fname := fmt.Sprintf("results/%s-run.csv", mode)
-	f, err := os.OpenFile(fname, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(fname, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
 	if err != nil {
-		log.Printf("csv write error: %v", err)
+		slog.Error("csv open", "err", err, "file", fname)
 		return
 	}
 	defer f.Close()
 	w := csv.NewWriter(f)
-	w.Write([]string{"workers", "ops", "ops_per_sec", "p50_s", "p95_s", "p99_s", "error_rate"})
+	_ = w.Write([]string{
+		"workers", "duration_sec", "total_ops", "ops_per_sec",
+		"p50_latency_ms", "p95_latency_ms", "p99_latency_ms",
+		"errors", "valkey_cpu_pct",
+	})
 	for _, r := range results {
-		w.Write([]string{
+		_ = w.Write([]string{
 			strconv.Itoa(r.Workers),
-			strconv.FormatInt(r.Ops, 10),
+			fmt.Sprintf("%.2f", r.DurationSec),
+			strconv.FormatInt(r.TotalOps, 10),
 			fmt.Sprintf("%.2f", r.OpsPerSec),
-			fmt.Sprintf("%.6f", r.P50),
-			fmt.Sprintf("%.6f", r.P95),
-			fmt.Sprintf("%.6f", r.P99),
-			fmt.Sprintf("%.6f", r.ErrorRate),
+			fmt.Sprintf("%.3f", r.P50Ms),
+			fmt.Sprintf("%.3f", r.P95Ms),
+			fmt.Sprintf("%.3f", r.P99Ms),
+			strconv.FormatInt(r.Errors, 10),
+			fmt.Sprintf("%.2f", r.ValkeyCPUPct),
 		})
 	}
 	w.Flush()
+	if err := w.Error(); err != nil {
+		slog.Error("csv flush", "err", err)
+	}
+}
+
+func parseRamp(s string) ([]int, error) {
+	var result []int
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		n, err := strconv.Atoi(part)
+		if err != nil {
+			return nil, fmt.Errorf("invalid worker count %q: %w", part, err)
+		}
+		result = append(result, n)
+	}
+	if len(result) == 0 {
+		return nil, fmt.Errorf("no worker counts in ramp string")
+	}
+	return result, nil
 }
 
 func envOr(key, fallback string) string {
