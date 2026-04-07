@@ -1,12 +1,10 @@
-//go:build ignore
-
 package main
 
 import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"time"
 
@@ -16,7 +14,8 @@ import (
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
-		log.Fatalf("seed failed: %v", err)
+		slog.Error("seed failed", "err", err)
+		os.Exit(1)
 	}
 }
 
@@ -32,28 +31,24 @@ func run(args []string) error {
 	}
 
 	ctx := context.Background()
-	client, err := valkey.NewClient(valkey.Option{InitAddress: []string{*valkeyAddr}})
+	client, err := valkey.NewClient(valkey.ClientOption{InitAddress: []string{*valkeyAddr}})
 	if err != nil {
 		return fmt.Errorf("valkey client: %w", err)
 	}
 	defer client.Close()
 
-	pipeSize := 10000
+	const pipeSize = 5000
 
 	switch *mode {
 	case "hset":
 		return seedHSET(ctx, client, *seats, pipeSize)
 	case "bitfield":
-		return seedBitfield(ctx, client, *seats, pipeSize)
+		return seedBitfield(ctx, client, *seats)
 	case "both":
 		if err := seedHSET(ctx, client, *seats, pipeSize); err != nil {
 			return err
 		}
-		fmt.Println()
-		if err := seedBitfield(ctx, client, *seats, pipeSize); err != nil {
-			return err
-		}
-		return nil
+		return seedBitfield(ctx, client, *seats)
 	default:
 		return fmt.Errorf("unknown mode: %s (use hset, bitfield, or both)", *mode)
 	}
@@ -63,60 +58,52 @@ func seedHSET(ctx context.Context, client valkey.Client, seats, pipeSize int) er
 	start := time.Now()
 	key := "seats:event:1"
 
-	log.Printf("Seeding %d seats as HSET on key %q...", seats, key)
+	slog.Info("seeding HSET", "seats", seats, "key", key)
 
 	for idx := 0; idx < seats; idx += pipeSize {
 		end := idx + pipeSize
 		if end > seats {
 			end = seats
 		}
-		pipe := client.B()
+		// Build one HSET command with all field-value pairs in this batch
+		fv := client.B().Hset().Key(key).FieldValue()
 		for i := idx; i < end; i++ {
-			pipe.HSet(key, fmt.Sprintf("seat:%05d", i+1), "available")
+			fv = fv.FieldValue(fmt.Sprintf("seat:%05d", i+1), "available")
 		}
-		if _, err := pipe.Exec(ctx); err != nil {
-			return fmt.Errorf("hset seed: %w", err)
+		if err := client.Do(ctx, fv.Build()).Error(); err != nil {
+			return fmt.Errorf("hset seed batch %d-%d: %w", idx, end, err)
 		}
 	}
 
-	client.Flush(ctx)
 	elapsed := time.Since(start)
-	opsPerSec := float64(seats) / elapsed.Seconds()
-	log.Printf("HSET seed complete: %d seats in %.2fs (%.0f ops/sec)", seats, elapsed.Seconds(), opsPerSec)
+	slog.Info("HSET seed complete", "seats", seats, "elapsed", elapsed, "ops_per_sec", float64(seats)/elapsed.Seconds())
 	return nil
 }
 
-func seedBitfield(ctx context.Context, client valkey.Client, seats, pipeSize int) error {
+func seedBitfield(ctx context.Context, client valkey.Client, seats int) error {
 	start := time.Now()
 	bitsKey := "seats:event:1:bits"
 	holdersKey := "seats:event:1:holders"
 
-	log.Printf("Seeding %d seats as BITFIELD (2 bits/seat) on key %q...", seats, bitsKey)
+	slog.Info("seeding BITFIELD", "seats", seats, "bits_key", bitsKey)
 
 	// Clear any existing data
-	if _, err := client.Do(ctx, client.B().Del(bitsKey, holdersKey).Payload()).Result(); err != nil {
-		log.Printf("DEL warning (key may not exist): %v", err)
+	if err := client.Do(ctx, client.B().Del().Key(bitsKey, holdersKey).Build()).Error(); err != nil {
+		slog.Warn("DEL warning (key may not exist)", "err", err)
 	}
 
-	for idx := 0; idx < seats; idx += pipeSize {
-		end := idx + pipeSize
-		if end > seats {
-			end = seats
-		}
-		pipe := client.B()
-		for i := idx; i < end; i++ {
-			// Set 2 bits at offset i*2 to value 0 (available)
-			pipe.BitField(bitsKey, "SET", "u2", i*2, 0)
-		}
-		if _, err := pipe.Exec(ctx); err != nil {
-			return fmt.Errorf("bitfield seed: %w", err)
-		}
+	// Pre-allocate the bitfield string by setting the last seat's offset.
+	// All bits default to 0 (available) after DEL; this just sizes the string correctly.
+	lastOffset := int64((seats - 1) * 2)
+	cmd := client.B().Arbitrary("BITFIELD").Keys(bitsKey).
+		Args("SET", "u2", fmt.Sprintf("%d", lastOffset), "0").Build()
+	if err := client.Do(ctx, cmd).Error(); err != nil {
+		return fmt.Errorf("bitfield preallocate: %w", err)
 	}
 
-	client.Flush(ctx)
 	elapsed := time.Since(start)
-	opsPerSec := float64(seats) / elapsed.Seconds()
-	log.Printf("BITFIELD seed complete: %d seats in %.2fs (%.0f ops/sec)", seats, elapsed.Seconds(), opsPerSec)
+	slog.Info("BITFIELD seed complete", "seats", seats, "elapsed", elapsed,
+		"memory_bytes_approx", (seats*2+7)/8)
 	return nil
 }
 
