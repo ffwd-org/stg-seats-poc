@@ -1,19 +1,68 @@
-.PHONY: help provision provision-broker seed test-direct test-redpanda test-nats test-valkey-streams teardown
+.PHONY: help build redpanda nats valkey-streams direct all provision seed teardown
 
 GCP_PROJECT ?= $(shell gcloud config get-value project 2>/dev/null)
 GCP_ZONE    ?= us-central1-a
 VALKEY_ADDR  ?= 10.142.0.xx
 BROKER_ADDR  ?= 10.142.0.xx
+RATE         ?= 10000
+DURATION     ?= 120s
+BATCH_SIZE   ?= 100
+CONSUMERS    ?= 1
 
 help:
 	@echo "POC 4 — Intent Queue (Redpanda vs NATS vs Valkey Streams)"
-	@echo "  make provision            Provision Cluster A + queue broker"
-	@echo "  make seed                 Seed 100K seats in Valkey"
-	@echo "  make test-direct          Direct-to-Valkey baseline"
-	@echo "  make test-redpanda        Redpanda queue path"
-	@echo "  make test-nats            NATS JetStream path"
-	@echo "  make test-valkey-streams  Valkey Streams path"
-	@echo "  make teardown             Tear down all VMs"
+	@echo ""
+	@echo "  make build              Build all binaries"
+	@echo "  make direct             Direct-to-Valkey baseline"
+	@echo "  make redpanda           Redpanda queue path"
+	@echo "  make nats               NATS JetStream path"
+	@echo "  make valkey-streams     Valkey Streams path"
+	@echo "  make all                Run all 4 tests sequentially"
+	@echo ""
+	@echo "  make provision          Provision GCP VMs"
+	@echo "  make seed               Seed 100K seats in Valkey"
+	@echo "  make teardown           Tear down all VMs"
+
+build:
+	go build -o bin/producer ./cmd/producer
+	go build -o bin/consumer ./cmd/consumer
+	go build -o bin/direct   ./cmd/direct
+
+direct:
+	@if [ "$(VALKEY_ADDR)" = "10.142.0.xx" ]; then echo "Set VALKEY_ADDR"; exit 1; fi
+	go run ./cmd/direct --valkey-addr=$(VALKEY_ADDR)
+
+redpanda:
+	@if [ "$(BROKER_ADDR)" = "10.142.0.xx" ]; then echo "Set BROKER_ADDR"; exit 1; fi
+	@if [ "$(VALKEY_ADDR)" = "10.142.0.xx" ]; then echo "Set VALKEY_ADDR"; exit 1; fi
+	docker compose -f docker-compose.redpanda.yml up -d
+	go run ./cmd/consumer --queue=redpanda --valkey-addr=$(VALKEY_ADDR) \
+		--redpanda-brokers=$(BROKER_ADDR):9092 --batch-size=$(BATCH_SIZE) \
+		--consumers=$(CONSUMERS) &
+	sleep 2
+	go run ./cmd/producer --queue=redpanda --rate=$(RATE) --duration=$(DURATION) \
+		--redpanda-brokers=$(BROKER_ADDR):9092
+
+nats:
+	@if [ "$(BROKER_ADDR)" = "10.142.0.xx" ]; then echo "Set BROKER_ADDR"; exit 1; fi
+	@if [ "$(VALKEY_ADDR)" = "10.142.0.xx" ]; then echo "Set VALKEY_ADDR"; exit 1; fi
+	docker compose -f docker-compose.nats.yml up -d
+	go run ./cmd/consumer --queue=nats --valkey-addr=$(VALKEY_ADDR) \
+		--nats-url=nats://$(BROKER_ADDR):4222 --batch-size=$(BATCH_SIZE) \
+		--consumers=$(CONSUMERS) &
+	sleep 2
+	go run ./cmd/producer --queue=nats --rate=$(RATE) --duration=$(DURATION) \
+		--nats-url=nats://$(BROKER_ADDR):4222
+
+valkey-streams:
+	@if [ "$(VALKEY_ADDR)" = "10.142.0.xx" ]; then echo "Set VALKEY_ADDR"; exit 1; fi
+	go run ./cmd/consumer --queue=valkey-streams --valkey-addr=$(VALKEY_ADDR) \
+		--batch-size=$(BATCH_SIZE) --consumers=$(CONSUMERS) &
+	sleep 2
+	go run ./cmd/producer --queue=valkey-streams --rate=$(RATE) --duration=$(DURATION) \
+		--valkey-addr=$(VALKEY_ADDR)
+
+all: direct redpanda nats valkey-streams
 
 provision:
 	gcloud compute instances create poc-valkey \
@@ -38,28 +87,6 @@ provision:
 seed:
 	@if [ "$(VALKEY_ADDR)" = "10.142.0.xx" ]; then echo "Set VALKEY_ADDR"; exit 1; fi
 	go run ./cmd/seed --valkey-addr=$(VALKEY_ADDR)
-
-test-direct:
-	@if [ "$(VALKEY_ADDR)" = "10.142.0.xx" ]; then echo "Set VALKEY_ADDR"; exit 1; fi
-	go run ./cmd/producer --queue=direct --rate=10000 --duration=120s \
-		--valkey-addr=$(VALKEY_ADDR)
-
-test-redpanda:
-	@if [ "$(BROKER_ADDR)" = "10.142.0.xx" ]; then echo "Set BROKER_ADDR"; exit 1; fi
-	docker compose -f docker-compose.redpanda.yml up -d
-	go run ./cmd/producer --queue=redpanda --rate=10000 --duration=120s \
-		--redpanda-brokers=$(BROKER_ADDR):9092
-
-test-nats:
-	@if [ "$(BROKER_ADDR)" = "10.142.0.xx" ]; then echo "Set BROKER_ADDR"; exit 1; fi
-	docker compose -f docker-compose.nats.yml up -d
-	go run ./cmd/producer --queue=nats --rate=10000 --duration=120s \
-		--nats-url=nats://$(BROKER_ADDR):4222
-
-test-valkey-streams:
-	@if [ "$(VALKEY_ADDR)" = "10.142.0.xx" ]; then echo "Set VALKEY_ADDR"; exit 1; fi
-	go run ./cmd/producer --queue=valkey-streams --rate=10000 --duration=120s \
-		--valkey-addr=$(VALKEY_ADDR)
 
 teardown:
 	gcloud compute instances delete poc-valkey poc-loadgen poc-broker \

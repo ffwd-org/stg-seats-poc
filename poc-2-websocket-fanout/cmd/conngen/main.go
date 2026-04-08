@@ -1,5 +1,3 @@
-//go:build ignore
-
 package main
 
 import (
@@ -7,7 +5,12 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
+	"net"
 	"net/http"
+	"os"
+	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -19,44 +22,80 @@ import (
 
 const pocName = "poc2-conngen"
 
+// LatencyCollector is a thread-safe collector for latency samples.
+type LatencyCollector struct {
+	mu   sync.Mutex
+	data []float64
+}
+
+func (l *LatencyCollector) Append(v float64) {
+	l.mu.Lock()
+	l.data = append(l.data, v)
+	l.mu.Unlock()
+}
+
+func (l *LatencyCollector) Reset() []float64 {
+	l.mu.Lock()
+	d := l.data
+	l.data = nil
+	l.mu.Unlock()
+	return d
+}
+
 var (
 	flagTarget      string
 	flagConnections int
 	flagRampRate    int
 	flagMetricsPort int
+	flagSourceIPs   string
 
-	connected   atomic.Int32
+	connected    atomic.Int32
 	messagesRcvd atomic.Int64
-	latenciesMs atomic.Uint64Slice
-	latMu       sync.Mutex
-)
+	latencies    = &LatencyCollector{}
 
-func init() {
-	prometheus.NewGauge(prometheus.GaugeOpts{
+	connectedGauge = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "poc2_connections_connected",
 		Help: "Currently connected WebSocket clients",
-	}).Add(0)
-	prometheus.NewCounter(prometheus.CounterOpts{
+	})
+	messagesCounter = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "poc2_messages_received_total",
 		Help: "Total broadcast messages received",
 	})
+)
+
+func init() {
+	prometheus.MustRegister(connectedGauge, messagesCounter)
 }
 
 func main() {
 	fs := flag.NewFlagSet("conngen", flag.ContinueOnError)
 	fs.StringVar(&flagTarget, "target", "ws://localhost:8080/ws/event/1", "WebSocket server URL")
-	fs.IntVar(&flagConnections, "connections", 10000, "total connections to establish")
+	fs.IntVar(&flagConnections, "connections", 250000, "total connections to establish")
 	fs.IntVar(&flagRampRate, "ramp-rate", 5000, "connections per second during ramp")
 	fs.IntVar(&flagMetricsPort, "metrics-port", 2113, "Prometheus metrics port")
-	if err := fs.Parse(nil); err != nil {
+	fs.StringVar(&flagSourceIPs, "source-ips", "", "comma-separated source IPs for dialer binding")
+	if err := fs.Parse(os.Args[1:]); err != nil {
 		log.Fatal(err)
+	}
+
+	// Parse source IPs
+	var sourceIPs []net.IP
+	if flagSourceIPs != "" {
+		for _, s := range strings.Split(flagSourceIPs, ",") {
+			s = strings.TrimSpace(s)
+			ip := net.ParseIP(s)
+			if ip == nil {
+				log.Fatalf("invalid source IP: %s", s)
+			}
+			sourceIPs = append(sourceIPs, ip)
+		}
 	}
 
 	go func() {
 		http.Handle("/metrics", promhttp.Handler())
 		addr := fmt.Sprintf(":%d", flagMetricsPort)
 		log.Printf("Metrics server listening on %s", addr)
-		log.Printf(http.ListenAndServe(addr, nil))
+		log.Fatal(http.ListenAndServe(addr, nil))
 	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
@@ -64,8 +103,8 @@ func main() {
 
 	log.Printf("Connecting %d clients to %s at %d/sec", flagConnections, flagTarget, flagRampRate)
 
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
+	// Start latency reporter
+	go latencyReporter(ctx)
 
 	var wg sync.WaitGroup
 	delayPerConn := time.Second / time.Duration(flagRampRate)
@@ -74,17 +113,13 @@ func main() {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			runClient(ctx, id)
+			var srcIP net.IP
+			if len(sourceIPs) > 0 {
+				srcIP = sourceIPs[id%len(sourceIPs)]
+			}
+			runClient(ctx, id, srcIP)
 		}(i)
 
-		// Rate-limit connection establishment
-		if i > 0 && i%flagRampRate == 0 {
-			select {
-			case <-ticker.C:
-			case <-ctx.Done():
-				return
-			}
-		}
 		if delayPerConn > 0 {
 			time.Sleep(delayPerConn)
 		}
@@ -102,14 +137,18 @@ func main() {
 	<-ctx.Done()
 }
 
-func runClient(ctx context.Context, id int) {
+func runClient(ctx context.Context, id int, srcIP net.IP) {
 	url := flagTarget
-	if flagRampRate > 0 {
-		// Each client gets its own event channel
-		url = fmt.Sprintf("%s/%d", flagTarget, id%100) // spread across up to 100 channels
-	}
 
 	dialer := websocket.Dialer{}
+	if srcIP != nil {
+		dialer.NetDialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			localAddr := &net.TCPAddr{IP: srcIP}
+			d := net.Dialer{LocalAddr: localAddr}
+			return d.DialContext(ctx, network, addr)
+		}
+	}
+
 	ws, _, err := dialer.DialContext(ctx, url, nil)
 	if err != nil {
 		log.Printf("[client %d] dial error: %v", id, err)
@@ -118,21 +157,44 @@ func runClient(ctx context.Context, id int) {
 	defer ws.Close()
 
 	connected.Add(1)
-	defer connected.Add(-1)
+	connectedGauge.Inc()
+	defer func() {
+		connected.Add(-1)
+		connectedGauge.Dec()
+	}()
 
 	for {
-		msgType, msg, err := ws.ReadMessage()
+		_, msg, err := ws.ReadMessage()
 		if err != nil {
 			return
 		}
 		messagesRcvd.Add(1)
-		_ = msgType
+		messagesCounter.Inc()
 
-		// Record receive time — for actual fan-out latency, compare to broadcast trigger time
+		// Record receive time for latency tracking
 		if len(msg) > 0 {
-			latMu.Lock()
-			latenciesMs.Append(uint64(time.Now().UnixMilli()))
-			latMu.Unlock()
+			latencies.Append(float64(time.Now().UnixMilli()))
+		}
+	}
+}
+
+func latencyReporter(ctx context.Context) {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			data := latencies.Reset()
+			if len(data) == 0 {
+				continue
+			}
+			sort.Float64s(data)
+			n := len(data)
+			p50 := data[int(math.Floor(float64(n)*0.50))]
+			p99 := data[int(math.Floor(float64(n)*0.99))]
+			log.Printf("latency samples=%d  p50=%.0fms  p99=%.0fms", n, p50, p99)
 		}
 	}
 }

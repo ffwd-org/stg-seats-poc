@@ -1,14 +1,13 @@
-//go:build ignore
-
 package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"runtime"
 	"time"
 
@@ -23,8 +22,10 @@ import (
 const pocName = "poc2"
 
 var (
-	flagPort         int
+	flagPort        int
 	flagMetricsPort int
+	flagReadBuffer  int
+	flagWriteBuffer int
 
 	activeConns = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "poc2_active_connections",
@@ -39,29 +40,27 @@ var (
 		Help:    "Time to fan out a broadcast to all connections",
 		Buckets: []float64{.001, .005, .01, .025, .05, .1, .25, .5, 1},
 	})
-	broadcastCount = prometheus.NewCounter(prometheus.CounterOpts{
+	broadcastCounter = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "poc2_broadcast_total",
 		Help: "Total broadcast operations",
+	})
+	droppedConns = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "poc2_dropped_connections_total",
+		Help: "Total dropped WebSocket connections",
 	})
 )
 
 func init() {
-	prometheus.MustRegister(activeConns, goroutineCount, broadcastDuration, broadcastCount)
-}
-
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		return true // allow all origins in POC
-	},
+	prometheus.MustRegister(activeConns, goroutineCount, broadcastDuration, broadcastCounter, droppedConns)
 }
 
 func main() {
 	fs := flag.NewFlagSet("wsserver", flag.ContinueOnError)
 	fs.IntVar(&flagPort, "port", 8080, "HTTP server port")
 	fs.IntVar(&flagMetricsPort, "metrics-port", 2112, "Prometheus metrics port")
-	if err := fs.Parse(nil); err != nil {
+	fs.IntVar(&flagReadBuffer, "read-buffer", 1024, "WebSocket read buffer size in bytes")
+	fs.IntVar(&flagWriteBuffer, "write-buffer", 1024, "WebSocket write buffer size in bytes")
+	if err := fs.Parse(os.Args[1:]); err != nil {
 		log.Fatal(err)
 	}
 
@@ -81,8 +80,16 @@ func main() {
 	go h.Run(ctx)
 	go metricsReporter(ctx)
 
+	upgrader := websocket.Upgrader{
+		ReadBufferSize:  flagReadBuffer,
+		WriteBufferSize: flagWriteBuffer,
+		CheckOrigin: func(r *http.Request) bool {
+			return true // allow all origins in POC
+		},
+	}
+
 	mux := http.NewServeMux()
-	mux.HandleFunc("/ws/event/", handleWS(h))
+	mux.HandleFunc("/ws/event/", handleWS(h, &upgrader))
 	mux.HandleFunc("/broadcast/", handleBroadcast(h))
 	mux.Handle("/metrics", promhttp.Handler())
 
@@ -92,15 +99,15 @@ func main() {
 	metricsAddr := fmt.Sprintf(":%d", flagMetricsPort)
 	go func() {
 		log.Printf("Metrics server listening on %s", metricsAddr)
-		log.Printf(http.ListenAndServe(metricsAddr, promhttp.Handler()))
+		log.Fatal(http.ListenAndServe(metricsAddr, promhttp.Handler()))
 	}()
 
 	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Printf("server: %v", err)
+		log.Fatal("server: ", err)
 	}
 }
 
-func handleWS(h *hub.Hub) http.HandlerFunc {
+func handleWS(h *hub.Hub, upgrader *websocket.Upgrader) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		eventID := r.URL.Path[len("/ws/event/"):]
 		if eventID == "" {
@@ -123,9 +130,10 @@ func handleWS(h *hub.Hub) http.HandlerFunc {
 		// Read loop — just drain incoming messages (pings, acks)
 		go func() {
 			defer func() {
-				h.unregister <- c
+				h.Unregister(c)
 				c.Close()
 				activeConns.Dec()
+				droppedConns.Inc()
 				goroutineCount.Set(float64(runtime.NumGoroutine()))
 			}()
 			for {
@@ -150,17 +158,23 @@ func handleBroadcast(h *hub.Hub) http.HandlerFunc {
 			return
 		}
 
-		var payload map[string]interface{}
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			payload = map[string]interface{}{"ts": time.Now().Unix()}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "failed to read body", http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+
+		if len(body) == 0 {
+			body = []byte(fmt.Sprintf(`{"ts":%d}`, time.Now().Unix()))
 		}
 
-		msg, _ := json.Marshal(payload)
 		n := h.BroadcastCount(eventID)
-		broadcastCount.Inc()
+		dur := h.Broadcast(eventID, body)
+		broadcastCounter.Inc()
 
-		log.Printf("broadcast to %s (%d conns): %s", eventID, n, string(msg))
-		fmt.Fprintf(w, `{"event":"%s","conns":%d}`, eventID, n)
+		log.Printf("broadcast to %s (%d conns): %s [%v]", eventID, n, string(body), dur)
+		fmt.Fprintf(w, `{"event":"%s","conns":%d,"duration_ms":%.2f}`, eventID, n, dur.Seconds()*1000)
 	}
 }
 

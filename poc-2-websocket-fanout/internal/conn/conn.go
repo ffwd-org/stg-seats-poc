@@ -1,7 +1,6 @@
 package conn
 
 import (
-	"context"
 	"sync"
 	"time"
 
@@ -13,15 +12,14 @@ const writeDeadline = 5 * time.Second
 // Conn wraps a websocket.Conn with a per-connection write mutex and deadline.
 // This is the critical fix: individual WriteMessage calls must not block each other.
 type Conn struct {
-	ws   *websocket.Conn
-	mu   sync.Mutex
-	send chan []byte
+	ws       *websocket.Conn
+	mu       sync.Mutex
+	closeOnce sync.Once
 }
 
 func NewConn(ws *websocket.Conn) *Conn {
 	return &Conn{
-		ws:   ws,
-		send: make(chan []byte, 256),
+		ws: ws,
 	}
 }
 
@@ -41,10 +39,13 @@ func (c *Conn) WriteJSON(v interface{}) error {
 	return c.ws.WriteJSON(v)
 }
 
-// Close gracefully shuts down the connection.
+// Close gracefully shuts down the connection. Safe to call multiple times.
 func (c *Conn) Close() error {
-	close(c.send)
-	return c.ws.Close()
+	var err error
+	c.closeOnce.Do(func() {
+		err = c.ws.Close()
+	})
+	return err
 }
 
 // SetReadDeadline sets the read deadline. Zero value = no deadline.

@@ -2,42 +2,64 @@ package queue
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
+	"sync"
+	"time"
 
+	"github.com/ffwd-org/stg-seats-poc/poc-4-intent-queue/internal/intent"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
-// RedpandaProducer produces intents to Redpanda.
+const redpandaTopic = "seat-holds"
+
+// RedpandaProducer produces intents to Redpanda using async produce with acks=1.
 type RedpandaProducer struct {
 	cl *kgo.Client
+	buf sync.Pool
 }
 
-// NewRedpandaProducer creates a Redpanda producer.
-// brokers: e.g. []string{"10.10.0.5:9092"}
-func NewRedpandaProducer(ctx context.Context, brokers []string) (*RedpandaProducer, error) {
+// NewRedpandaProducer creates a Redpanda producer with acks=1 and 5ms linger.
+func NewRedpandaProducer(_ context.Context, brokers []string) (*RedpandaProducer, error) {
 	cl, err := kgo.NewClient(
 		kgo.SeedBrokers(brokers...),
-		kgo.DefaultProduceTopic("seat-holds"),
+		kgo.DefaultProduceTopic(redpandaTopic),
+		kgo.RequiredAcks(kgo.LeaderAck()),
+		kgo.ProducerLinger(5*time.Millisecond),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("redpanda producer: %w", err)
 	}
-	return &RedpandaProducer{cl: cl}, nil
+	return &RedpandaProducer{
+		cl: cl,
+		buf: sync.Pool{New: func() any { b := make([]byte, intent.IntentSize); return &b }},
+	}, nil
 }
 
-func (p *RedpandaProducer) Produce(ctx context.Context, key []byte, value []byte) error {
-	r := kgo.Record{
-		Topic: "seat-holds",
+func (p *RedpandaProducer) Send(ctx context.Context, h *intent.HoldIntent) error {
+	bp := p.buf.Get().(*[]byte)
+	buf := *bp
+	intent.Encode(h, buf)
+
+	// Copy buf so we can return it to pool immediately
+	value := make([]byte, intent.IntentSize)
+	copy(value, buf)
+	p.buf.Put(bp)
+
+	// Key on EventID for partition affinity
+	key := make([]byte, 8)
+	binary.LittleEndian.PutUint64(key, h.EventID)
+
+	r := &kgo.Record{
 		Key:   key,
 		Value: value,
 	}
-	results := p.cl.ProduceSync(ctx, &r)
-	for _, res := range results {
-		if res.Err != nil {
-			return fmt.Errorf("redpanda produce: %w", res.Err)
-		}
-	}
-	return nil
+
+	errCh := make(chan error, 1)
+	p.cl.Produce(ctx, r, func(_ *kgo.Record, err error) {
+		errCh <- err
+	})
+	return <-errCh
 }
 
 func (p *RedpandaProducer) Close() error {
@@ -50,12 +72,12 @@ type RedpandaConsumer struct {
 	cl *kgo.Client
 }
 
-func NewRedpandaConsumer(ctx context.Context, brokers []string, group string) (*RedpandaConsumer, error) {
+func NewRedpandaConsumer(_ context.Context, brokers []string, group string) (*RedpandaConsumer, error) {
 	cl, err := kgo.NewClient(
 		kgo.SeedBrokers(brokers...),
 		kgo.ConsumerGroup(group),
-		kgo.ConsumeTopics("seat-holds"),
-		kgo.ConsumeResetOffset(kgo.NewOffsetAtEnd()),
+		kgo.ConsumeTopics(redpandaTopic),
+		kgo.ConsumeResetOffset(kgo.NewOffset().AtEnd()),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("redpanda consumer: %w", err)
@@ -63,13 +85,22 @@ func NewRedpandaConsumer(ctx context.Context, brokers []string, group string) (*
 	return &RedpandaConsumer{cl: cl}, nil
 }
 
-func (c *RedpandaConsumer) Poll(ctx context.Context, max int) ([]kgo.Record, error) {
+func (c *RedpandaConsumer) FetchBatch(ctx context.Context, maxBatch int) ([]*intent.HoldIntent, error) {
 	fetches := c.cl.PollFetches(ctx)
-	var records []kgo.Record
-	fetches.EachRecord(func(r kgo.Record) {
-		records = append(records, r)
+	if errs := fetches.Errors(); len(errs) > 0 {
+		return nil, errs[0].Err
+	}
+	var intents []*intent.HoldIntent
+	fetches.EachRecord(func(r *kgo.Record) {
+		h, err := intent.Decode(r.Value)
+		if err == nil {
+			intents = append(intents, h)
+		}
+		if len(intents) >= maxBatch {
+			return
+		}
 	})
-	return records, nil
+	return intents, nil
 }
 
 func (c *RedpandaConsumer) Close() error {

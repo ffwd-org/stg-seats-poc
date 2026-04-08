@@ -1,5 +1,3 @@
-//go:build ignore
-
 package main
 
 import (
@@ -21,10 +19,10 @@ const pocName = "poc4-direct"
 
 var (
 	flagPort        int
-	flagValkeyAddr string
+	flagValkeyAddr  string
 	flagMetricsPort int
-	valkeyClient   valkey.Client
-	holdScript     *valkey.Script
+	valkeyClient    valkey.Client
+	holdSHA         string
 )
 
 func main() {
@@ -34,20 +32,29 @@ func main() {
 	fs.IntVar(&flagPort, "port", 8080, "HTTP server port")
 	fs.StringVar(&flagValkeyAddr, "valkey-addr", envOr("VALKEY_ADDR", "localhost:6379"), "Valkey address")
 	fs.IntVar(&flagMetricsPort, "metrics-port", 2112, "Prometheus metrics port")
-	if err := fs.Parse(nil); err != nil {
+	if err := fs.Parse(os.Args[1:]); err != nil {
 		log.Fatal(err)
 	}
 
 	ctx := context.Background()
 	var err error
-	valkeyClient, err = valkey.NewClient(valkey.Option{InitAddress: []string{flagValkeyAddr}})
+	valkeyClient, err = valkey.NewClient(valkey.ClientOption{InitAddress: []string{flagValkeyAddr}})
 	if err != nil {
 		log.Fatalf("valkey client: %v", err)
 	}
 	defer valkeyClient.Close()
 
-	holdSrc, _ := os.ReadFile("lua/hold_seat.lua")
-	holdScript = valkey.NewScript(string(holdSrc))
+	// Load and cache Lua script
+	holdSrc, err := os.ReadFile("lua/hold_seat.lua")
+	if err != nil {
+		log.Fatalf("read lua: %v", err)
+	}
+	loadCmd := valkeyClient.B().ScriptLoad().Script(string(holdSrc)).Build()
+	holdSHA, err = valkeyClient.Do(ctx, loadCmd).ToString()
+	if err != nil {
+		log.Fatalf("SCRIPT LOAD: %v", err)
+	}
+	log.Printf("Loaded hold_seat.lua SHA=%s", holdSHA)
 
 	go func() {
 		http.Handle("/metrics", promhttp.Handler())
@@ -60,7 +67,7 @@ func main() {
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) { fmt.Fprintln(w, "ok") })
 
 	addr := fmt.Sprintf(":%d", flagPort)
-	log.Printf("Direct-to-Valkey server on %s → %s", addr, flagValkeyAddr)
+	log.Printf("Direct-to-Valkey server on %s -> %s", addr, flagValkeyAddr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Printf("server: %v", err)
 	}
@@ -88,21 +95,23 @@ func handleHold(w http.ResponseWriter, r *http.Request) {
 
 	seatKey := fmt.Sprintf("seats:event:%d", req.EventID)
 	seatID := fmt.Sprintf("seat:%05d", req.SeatID)
-	now := uint64(time.Now().Unix())
+	now := fmt.Sprintf("%d", time.Now().Unix())
 
-	result, err := holdScript.Exec(ctx, valkeyClient,
-		[]string{seatKey},
-		[]interface{}{seatID, req.HoldToken, req.TTLSeconds, now}).ToString()
+	cmd := valkeyClient.B().Evalsha().Sha1(holdSHA).Numkeys(1).Key(seatKey).Arg(seatID, req.HoldToken, fmt.Sprintf("%d", req.TTLSeconds), now).Build()
+	result, err := valkeyClient.Do(ctx, cmd).ToArray()
 	if err != nil {
 		log.Printf("hold error: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
-	if result == "seat_unavailable" {
-		w.WriteHeader(http.StatusConflict)
-		fmt.Fprintln(w, `{"ok":false,"reason":"seat_unavailable"}`)
-		return
+	if len(result) >= 2 {
+		status, _ := result[1].ToString()
+		if status == "seat_unavailable" {
+			w.WriteHeader(http.StatusConflict)
+			fmt.Fprintln(w, `{"ok":false,"reason":"seat_unavailable"}`)
+			return
+		}
 	}
 
 	w.WriteHeader(http.StatusOK)

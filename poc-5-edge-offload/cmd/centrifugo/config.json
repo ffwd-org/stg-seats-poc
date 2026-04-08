@@ -1,50 +1,24 @@
 {
-  "token_hmac_key": "placeholder-secret-change-in-production",
-  "api_key": "placeholder-api-key",
-  "namespace": "stg-seats",
-  "channel_prefix": "stg-seats",
-  "redis_host": "10.10.0.x",
-  "redis_port": 6379,
-  "redis_password": "",
-  "redis_db": 0,
-  "redis_master_name": "",
-  "redis_sentinel_master_set": "",
-  "redis_username": "",
-  "redis_tls": false,
-  "redis_tls_insecure": false,
-  "engine": "redis",
-  "allowed_origins": ["*"],
-  "no_internal_username": false,
-  "proxy_http": false,
-  "proxy_auth": false,
-  "presence": true,
-  "history_meta_ttl": 86400,
-  "history_size": 1000,
-  "history_lifetime": 3600,
-  "history_recover": false,
-  "subscribe_recover": false,
-  "server": false,
+  "token_hmac_secret_key": "poc-secret-key-for-jwt",
+  "api_key": "poc-api-key",
+  "admin": false,
+  "prometheus": true,
+  "address": "0.0.0.0",
+  "port": 8000,
+  "internal_port": 9000,
   "namespaces": [
     {
-      "name": "stg-seats",
-      "channel_options": {
-        "presence": true,
-        "history_size": 100,
-        "history_lifetime": 300
-      }
+      "name": "events",
+      "history_size": 0,
+      "history_ttl": "0s",
+      "force_push_join_leave": false,
+      "allow_subscribe_for_client": true
     }
   ],
-  "grafana_url": "",
-  "prometheus": true,
-  "prometheus_path": "/metrics",
-  "debug": false,
-  "log_level": "info",
-  "log_file": "",
-  "port": 8000,
-  "web": false,
-  "health": true,
-  "admin": false,
-  "admin_password": "changeme",
-  "admin_secret": "changeme",
-  "admin_channel": "$internal.centrifugo.admin"
+  "client_channel_limit": 1,
+  "client_queue_max_size": 1048576,
+  "websocket": {
+    "read_buffer_size": 512,
+    "write_buffer_size": 512
+  }
 }

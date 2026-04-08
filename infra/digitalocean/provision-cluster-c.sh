@@ -5,6 +5,7 @@
 set -e
 
 REGION="${REGION:-nyc1}"
+VPC_NAME="stg-seats-poc"
 TAG_NAMES="stg-seats-poc,cluster-c"
 
 echo "[cluster-c] Starting provisioning in $REGION..."

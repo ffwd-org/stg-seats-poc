@@ -1,5 +1,3 @@
-//go:build ignore
-
 package main
 
 import (
@@ -27,21 +25,52 @@ import (
 
 const pocName = "poc3"
 
+// LatencyCollector is a thread-safe latency sample collector.
+type LatencyCollector struct {
+	mu   sync.Mutex
+	data []float64
+}
+
+func (l *LatencyCollector) Append(v float64) {
+	l.mu.Lock()
+	l.data = append(l.data, v)
+	l.mu.Unlock()
+}
+
+func (l *LatencyCollector) Len() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.data)
+}
+
+func (l *LatencyCollector) Reset() []float64 {
+	l.mu.Lock()
+	d := l.data
+	l.data = nil
+	l.mu.Unlock()
+	return d
+}
+
+func (l *LatencyCollector) Sorted() []float64 {
+	d := l.Reset()
+	sort.Float64s(d)
+	return d
+}
+
 var (
-	flagMode         string
-	flagValkeyAddr   string
-	flagWorkers      int
-	flagDuration     time.Duration
-	flagQuantity     int
-	flagSection      string
-	flagMetricsPort  int
-	flagStageDur     time.Duration
-	flagCooldown     time.Duration
+	flagMode          string
+	flagValkeyAddr    string
+	flagWorkers       int
+	flagDuration      time.Duration
+	flagQuantity      int
+	flagSection       string
+	flagMetricsPort   int
+	flagCooldown      time.Duration
+	flagFragmentation string
 
 	totalOps    atomic.Int64
 	totalErrors atomic.Int64
-	latencies   atomic.Uint64Slice
-	latMu       sync.Mutex
+	latencies   LatencyCollector
 )
 
 func init() {
@@ -62,8 +91,8 @@ func main() {
 	fs.IntVar(&flagQuantity, "quantity", 2, "seats per request")
 	fs.StringVar(&flagSection, "section", "*", "target section or * for any")
 	fs.IntVar(&flagMetricsPort, "metrics-port", 2112, "Prometheus metrics port")
-	fs.DurationVar(&flagStageDur, "stage-duration", 60*time.Second, "ramp stage duration")
 	fs.DurationVar(&flagCooldown, "cooldown", 10*time.Second, "pause between stages")
+	fs.StringVar(&flagFragmentation, "fragmentation", "0", "fragmentation label for results file naming")
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		log.Fatal(err)
 	}
@@ -74,29 +103,32 @@ func main() {
 		http.ListenAndServe(fmt.Sprintf(":%d", flagMetricsPort), nil)
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), flagStageDur)
+	ctx, cancel := context.WithTimeout(context.Background(), flagDuration)
 	defer cancel()
 
-	client, err := valkey.NewClient(valkey.Option{InitAddress: []string{flagValkeyAddr}})
+	client, err := valkey.NewClient(valkey.ClientOption{InitAddress: []string{flagValkeyAddr}})
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer client.Close()
 
 	// Load best-available Lua script
-	baSrc, _ := os.ReadFile("lua/best_available.lua")
-	baScript := valkey.NewScript(string(baSrc))
+	baSrc, err := os.ReadFile("lua/best_available.lua")
+	if err != nil {
+		log.Fatalf("reading lua script: %v", err)
+	}
+	baScript := valkey.NewLuaScript(string(baSrc))
 
-	log.Printf("POC 3 load test — mode: %s, workers: %d, quantity: %d, section: %s",
-		flagMode, flagWorkers, flagQuantity, flagSection)
+	log.Printf("POC 3 load test — mode: %s, workers: %d, quantity: %d, section: %s, fragmentation: %s",
+		flagMode, flagWorkers, flagQuantity, flagSection, flagFragmentation)
 
 	runLoadTest(ctx, client, baScript)
 }
 
-func runLoadTest(ctx context.Context, client valkey.Client, baScript *valkey.Script) {
+func runLoadTest(ctx context.Context, client valkey.Client, baScript *valkey.Lua) {
 	metrics.ActiveWorkers.WithLabelValues(pocName).Set(float64(flagWorkers))
 
-	ctx, cancel := context.WithTimeout(ctx, flagStageDur)
+	ctx, cancel := context.WithTimeout(ctx, flagDuration)
 	defer cancel()
 
 	latencies.Reset()
@@ -120,17 +152,16 @@ func runLoadTest(ctx context.Context, client valkey.Client, baScript *valkey.Scr
 				opStart := time.Now()
 				var ok bool
 				var err error
+				var seatIDs string
 
 				if flagMode == "best-available" {
-					ok, err = runBestAvailable(ctx, client, baScript, r)
+					ok, seatIDs, err = runBestAvailable(ctx, client, baScript, r)
 				} else {
 					ok, err = runRandom(ctx, client, r)
 				}
 
 				latency := time.Since(opStart).Seconds()
-				latMu.Lock()
-				latencies.Append(uint64(latency * 1e6))
-				latMu.Unlock()
+				latencies.Append(latency)
 
 				if err != nil || !ok {
 					totalErrors.Add(1)
@@ -142,6 +173,12 @@ func runLoadTest(ctx context.Context, client valkey.Client, baScript *valkey.Scr
 				totalOps.Add(1)
 				metrics.OpsTotal.WithLabelValues(pocName, "ok").Inc()
 				metrics.LatencyHist.WithLabelValues(pocName, "best-avail").Observe(latency)
+
+				// Release seats after successful best-available to maintain
+				// stable fragmentation during the test.
+				if flagMode == "best-available" && seatIDs != "" {
+					releaseSeats(ctx, client, seatIDs)
+				}
 			}
 		}(i)
 	}
@@ -173,14 +210,12 @@ func runLoadTest(ctx context.Context, client valkey.Client, baScript *valkey.Scr
 	}
 	opsPerSec := float64(totalOps.Load()) / elapsed.Seconds()
 
-	latMu.Lock()
-	n := latencies.Len()
-	vals := make([]float64, n)
-	for i := 0; i < n; i++ {
-		vals[i] = float64(latencies.At(i)) / 1e6
+	vals := latencies.Sorted()
+	n := len(vals)
+	if n == 0 {
+		log.Printf("No operations completed")
+		return
 	}
-	latMu.Unlock()
-	sort.Float64s(vals)
 
 	p50 := vals[n*50/100]
 	p95 := vals[n*95/100]
@@ -194,22 +229,53 @@ func runLoadTest(ctx context.Context, client valkey.Client, baScript *valkey.Scr
 	metrics.ActiveWorkers.WithLabelValues(pocName).Set(0)
 }
 
-func runBestAvailable(ctx context.Context, client valkey.Client, script *valkey.Script, r *rand.Rand) (bool, error) {
+func runBestAvailable(ctx context.Context, client valkey.Client, script *valkey.Lua, r *rand.Rand) (bool, string, error) {
 	result, err := script.Exec(ctx, client,
 		[]string{"seats:event:1", "venue:event:1:rows"},
-		[]interface{}{flagQuantity, flagSection, 50, 25}).ToString()
+		[]string{
+			strconv.Itoa(flagQuantity),
+			flagSection,
+			"50",
+			"25",
+		},
+	).ToString()
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	_ = r // reserved for scoring logic
-	return result != "0,no_contiguous_block" && !strings.HasPrefix(result, "0,"), nil
+	if result == "0,no_contiguous_block" || strings.HasPrefix(result, "0,") {
+		return false, "", nil
+	}
+	// Result format: "1,seat:00001,seat:00002,..."
+	parts := strings.SplitN(result, ",", 2)
+	if len(parts) < 2 {
+		return false, "", nil
+	}
+	return true, parts[1], nil
+}
+
+func releaseSeats(ctx context.Context, client valkey.Client, seatIDs string) {
+	seats := strings.Split(seatIDs, ",")
+	cmds := make(valkey.Commands, 0, len(seats))
+	for _, seatID := range seats {
+		seatID = strings.TrimSpace(seatID)
+		if seatID == "" {
+			continue
+		}
+		cmds = append(cmds, client.B().Hset().Key("seats:event:1").
+			FieldValue().FieldValue(seatID, "available").Build())
+	}
+	if len(cmds) > 0 {
+		client.DoMulti(ctx, cmds...)
+	}
 }
 
 func runRandom(ctx context.Context, client valkey.Client, r *rand.Rand) (bool, error) {
 	// Baseline: pick N random seats
 	seatIdx := r.Intn(100000)
 	seatID := fmt.Sprintf("seat:%05d", seatIdx+1)
-	status, err := client.HGet(ctx, "seats:event:1", seatID).ToString()
+	result := client.Do(ctx, client.B().Hget().Key("seats:event:1").Field(seatID).Build())
+	status, err := result.ToString()
 	if err != nil || status != "available" {
 		return false, err
 	}
@@ -218,7 +284,7 @@ func runRandom(ctx context.Context, client valkey.Client, r *rand.Rand) (bool, e
 
 func writeCSV(vals []float64, opsPerSec float64, errRate float64) {
 	os.MkdirAll("results", 0755)
-	fname := fmt.Sprintf("results/%s-%s.csv", flagMode, flagSection)
+	fname := fmt.Sprintf("results/%s-%s-f%s.csv", flagMode, flagSection, flagFragmentation)
 	f, err := os.OpenFile(fname, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Printf("csv error: %v", err)
@@ -231,9 +297,9 @@ func writeCSV(vals []float64, opsPerSec float64, errRate float64) {
 	w.Write([]string{
 		strconv.Itoa(flagWorkers),
 		fmt.Sprintf("%.2f", opsPerSec),
-		fmt.Sprintf("%.4f", vals[n*50/100]),
-		fmt.Sprintf("%.4f", vals[n*95/100]),
-		fmt.Sprintf("%.4f", vals[n*99/100]),
+		fmt.Sprintf("%.4f", vals[n*50/100]*1000),
+		fmt.Sprintf("%.4f", vals[n*95/100]*1000),
+		fmt.Sprintf("%.4f", vals[n*99/100]*1000),
 		fmt.Sprintf("%.6f", errRate),
 	})
 	w.Flush()

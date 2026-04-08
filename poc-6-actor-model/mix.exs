@@ -8,7 +8,12 @@ defmodule StgSeats.MixProject do
       elixir: "~> 1.16",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      releases: [
+        stg_seats: [
+          include_executables_for: [:unix]
+        ]
+      ]
     ]
   end
 
@@ -24,9 +29,11 @@ defmodule StgSeats.MixProject do
 
   defp deps do
     [
-      {:telemetry_poller, "~> 1.0"},
-      {:websockex, "~> 0.4"},
-      {:jason, "~> 1.4"}
+      {:bandit, "~> 1.5"},
+      {:plug, "~> 1.16"},
+      {:jason, "~> 1.4"},
+      {:telemetry_poller, "~> 1.1"},
+      {:telemetry_metrics_prometheus, "~> 1.1"}
     ]
   end
 end

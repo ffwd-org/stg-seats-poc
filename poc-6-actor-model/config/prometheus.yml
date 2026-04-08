@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: 'elixir-app'
+    static_configs:
+      - targets: ['elixir-app:4000']
+    metrics_path: '/metrics'

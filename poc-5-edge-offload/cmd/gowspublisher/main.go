@@ -1,5 +1,3 @@
-//go:build ignore
-
 package main
 
 import (
@@ -10,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -39,7 +38,7 @@ func (p *CentrifugoPublisher) Publish(ctx context.Context, channel string, data 
 		},
 	}
 	body, _ := json.Marshal(payload)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.apiURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.apiURL+"/api/publish", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -62,14 +61,16 @@ var (
 	flagCentrifugoURL string
 	flagCentrifugoKey string
 	flagPort          int
+	flagChannel       string
 )
 
 func main() {
 	fs := flag.NewFlagSet("gowspublisher", flag.ContinueOnError)
-	fs.StringVar(&flagCentrifugoURL, "centrifugo-url", "http://localhost:8000/api", "Centrifugo API URL")
-	fs.StringVar(&flagCentrifugoKey, "centrifugo-key", "", "Centrifugo API key")
+	fs.StringVar(&flagCentrifugoURL, "centrifugo-url", "http://localhost:8000", "Centrifugo base URL")
+	fs.StringVar(&flagCentrifugoKey, "centrifugo-key", "poc-api-key", "Centrifugo API key")
 	fs.IntVar(&flagPort, "port", 8080, "Go publisher HTTP port")
-	if err := fs.Parse(nil); err != nil {
+	fs.StringVar(&flagChannel, "channel", "events:event-1", "default Centrifugo channel namespace:name")
+	if err := fs.Parse(os.Args[1:]); err != nil {
 		log.Fatal(err)
 	}
 
@@ -79,7 +80,7 @@ func main() {
 	mux.HandleFunc("/publish/", handlePublish(publisher))
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) { fmt.Fprintln(w, "ok") })
 
-	log.Printf("Go WS Publisher listening on :%d → Centrifugo: %s", flagPort, flagCentrifugoURL)
+	log.Printf("Go WS Publisher listening on :%d → Centrifugo: %s (default channel: %s)", flagPort, flagCentrifugoURL, flagChannel)
 	if err := http.ListenAndServe(fmt.Sprintf(":%d", flagPort), mux); err != nil {
 		log.Printf("server: %v", err)
 	}
@@ -94,8 +95,9 @@ func handlePublish(p *CentrifugoPublisher) http.HandlerFunc {
 
 		channel := r.URL.Path[len("/publish/"):]
 		if channel == "" {
-			http.Error(w, "channel required", http.StatusBadRequest)
-			return
+			channel = flagChannel
+		} else {
+			channel = "events:" + channel
 		}
 
 		var data map[string]interface{}
@@ -104,7 +106,7 @@ func handlePublish(p *CentrifugoPublisher) http.HandlerFunc {
 		}
 
 		start := time.Now()
-		if err := p.Publish(r.Context(), "stg-seats:"+channel, data); err != nil {
+		if err := p.Publish(r.Context(), channel, data); err != nil {
 			log.Printf("publish error: %v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

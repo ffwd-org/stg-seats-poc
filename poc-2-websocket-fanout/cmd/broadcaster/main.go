@@ -1,16 +1,14 @@
-//go:build ignore
-
 package main
 
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -32,7 +30,7 @@ func main() {
 	fs.DurationVar(&flagDuration, "duration", 60*time.Second, "how long to broadcast")
 	fs.StringVar(&flagPayload, "payload", `{"seat":"42","status":"held"}`, "JSON payload")
 	fs.StringVar(&flagEventID, "event", "1", "event ID")
-	if err := fs.Parse(nil); err != nil {
+	if err := fs.Parse(os.Args[1:]); err != nil {
 		log.Fatal(err)
 	}
 

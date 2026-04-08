@@ -1,5 +1,3 @@
-//go:build ignore
-
 package main
 
 import (
@@ -16,15 +14,16 @@ import (
 )
 
 const (
-	Sections  = 20
+	Sections     = 20
 	RowsPerSection = 100
-	SeatsPerRow   = 50
-	TotalSeats    = Sections * RowsPerSection * SeatsPerRow // 100,000
+	SeatsPerRow    = 50
+	TotalSeats     = Sections * RowsPerSection * SeatsPerRow // 100,000
+	PipeSize       = 500
 )
 
 var (
-	flagMode         string
-	flagValkeyAddr   string
+	flagMode          string
+	flagValkeyAddr    string
 	flagFragmentation int
 )
 
@@ -40,7 +39,7 @@ func main() {
 	}
 
 	ctx := context.Background()
-	client, err := valkey.NewClient(valkey.Option{InitAddress: []string{flagValkeyAddr}})
+	client, err := valkey.NewClient(valkey.ClientOption{InitAddress: []string{flagValkeyAddr}})
 	if err != nil {
 		log.Fatalf("valkey client: %v", err)
 	}
@@ -83,9 +82,9 @@ func main() {
 	}
 }
 
-// Venue layout: section → row → [seatIds]
+// Venue layout: section -> row -> [seatIds]
 type Venue struct {
-	Seats map[string]map[string][]string // section → row → seatIds
+	Seats map[string]map[string][]string // section -> row -> seatIds
 	All   []string
 }
 
@@ -93,7 +92,7 @@ func buildVenue() *Venue {
 	v := &Venue{Seats: make(map[string]map[string][]string), All: make([]string, 0, TotalSeats)}
 	sectionRune := 'A'
 	for s := 0; s < Sections; s++ {
-		secName := fmt.Sprintf("%c", sectionRune+s)
+		secName := fmt.Sprintf("%c", sectionRune+int32(s))
 		v.Seats[secName] = make(map[string][]string)
 		for r := 1; r <= RowsPerSection; r++ {
 			rowName := fmt.Sprintf("%s-%d", secName, r)
@@ -110,59 +109,103 @@ func buildVenue() *Venue {
 }
 
 func seedLayout(ctx context.Context, client valkey.Client, layout *Venue) error {
-	pipe := client.BrPopPush(ctx, 0)
-	defer client.Close()
+	// seats:event:1             — status HSET
+	// venue:event:1:layout      — seatId -> {section:row:index:leftNeighbor:rightNeighbor}
+	// venue:event:1:rows        — rowName -> comma-sep seatIds
 
-	// seats:event:1 — status HSET
-	// venue:event:1:layout — seatId → {section,row,index}
-	// venue:event:1:rows — rowName → comma-sep seatIds
-
-	pipe.HSet(ctx, "seats:event:1", "placeholder", "available")
-	pipe.HDel(ctx, "seats:event:1", "placeholder")
+	cmds := make(valkey.Commands, 0, PipeSize)
+	flush := func() error {
+		if len(cmds) == 0 {
+			return nil
+		}
+		for _, res := range client.DoMulti(ctx, cmds...) {
+			if err := res.Error(); err != nil {
+				return fmt.Errorf("layout seed pipeline: %w", err)
+			}
+		}
+		cmds = cmds[:0]
+		return nil
+	}
 
 	for secName, rows := range layout.Seats {
 		for rowName, seatIds := range rows {
-			pipe.HSet(ctx, "venue:event:1:rows", rowName, strings.Join(seatIds, ","))
+			// Store row -> comma-sep seatIds
+			cmds = append(cmds, client.B().Hset().Key("venue:event:1:rows").
+				FieldValue().FieldValue(rowName, strings.Join(seatIds, ",")).Build())
+
 			for i, seatID := range seatIds {
-				pipe.HSet(ctx, "seats:event:1", seatID, "available")
-				pipe.HSet(ctx, "venue:event:1:layout", seatID,
-					fmt.Sprintf("%s:%s:%d", secName, rowName, i))
+				// Set each seat as available
+				cmds = append(cmds, client.B().Hset().Key("seats:event:1").
+					FieldValue().FieldValue(seatID, "available").Build())
+
+				// Build layout value with left/right neighbor info
+				leftNeighbor := ""
+				rightNeighbor := ""
+				if i > 0 {
+					leftNeighbor = seatIds[i-1]
+				}
+				if i < len(seatIds)-1 {
+					rightNeighbor = seatIds[i+1]
+				}
+				layoutVal := fmt.Sprintf("%s:%s:%d:%s:%s", secName, rowName, i, leftNeighbor, rightNeighbor)
+				cmds = append(cmds, client.B().Hset().Key("venue:event:1:layout").
+					FieldValue().FieldValue(seatID, layoutVal).Build())
+
+				if len(cmds) >= PipeSize {
+					if err := flush(); err != nil {
+						return err
+					}
+				}
 			}
 		}
 	}
 
-	if err := pipe.Drain(ctx); err != nil {
-		return fmt.Errorf("layout seed: %w", err)
+	if err := flush(); err != nil {
+		return err
 	}
-	log.Printf("Layout seeded: %d seats across %d sections × %d rows × %d seats",
+
+	log.Printf("Layout seeded: %d seats across %d sections x %d rows x %d seats",
 		TotalSeats, Sections, RowsPerSection, SeatsPerRow)
 	return nil
 }
 
 func seedHSET(ctx context.Context, client valkey.Client, layout *Venue) error {
 	log.Printf("Seeding HSET format (%d seats)...", TotalSeats)
-	pipe := client.BrPopPush(ctx, 0)
-	for _, seatID := range layout.All {
-		pipe.HSet(ctx, "seats:event:1", seatID, "available")
+
+	for idx := 0; idx < len(layout.All); idx += PipeSize {
+		end := idx + PipeSize
+		if end > len(layout.All) {
+			end = len(layout.All)
+		}
+		cmds := make(valkey.Commands, 0, end-idx)
+		for i := idx; i < end; i++ {
+			cmds = append(cmds, client.B().Hset().Key("seats:event:1").
+				FieldValue().FieldValue(layout.All[i], "available").Build())
+		}
+		for _, res := range client.DoMulti(ctx, cmds...) {
+			if err := res.Error(); err != nil {
+				return fmt.Errorf("hset seed: %w", err)
+			}
+		}
+		if idx%10000 == 0 {
+			log.Printf("HSET seeded batch: %d/%d", idx, TotalSeats)
+		}
 	}
-	if err := pipe.Drain(ctx); err != nil {
-		return fmt.Errorf("hset seed: %w", err)
-	}
+
 	log.Printf("HSET seeded: %d seats", TotalSeats)
 	return nil
 }
 
 func seedBitfield(ctx context.Context, client valkey.Client, layout *Venue) error {
 	log.Printf("Seeding BITFIELD format (2 bits/seat, %d total bits)...", TotalSeats*2)
-	// BITFIELD: no explicit init needed — Valkey auto-zeros on first SET
-	pipe := client.BrPopPush(ctx, 0)
-	for i := range layout.All {
-		pipe.BitField(ctx, "seats:event:1:bits",
-			"SET", "u2", i*2, 0) // 0 = available
+
+	// BITFIELD: pre-set the key to zeroed bytes
+	byteCount := (TotalSeats*2 + 7) / 8
+	zeros := make([]byte, byteCount)
+	if err := client.Do(ctx, client.B().Set().Key("seats:event:1:bits").Value(string(zeros)).Build()).Error(); err != nil {
+		return fmt.Errorf("bitfield init: %w", err)
 	}
-	if err := pipe.Drain(ctx); err != nil {
-		return fmt.Errorf("bitfield seed: %w", err)
-	}
+
 	log.Printf("BITFIELD seeded: %d seats (2 bits each)", TotalSeats)
 	return nil
 }
@@ -176,14 +219,23 @@ func applyFragmentation(ctx context.Context, client valkey.Client, layout *Venue
 	copy(shuffled, layout.All)
 	r.Shuffle(len(shuffled), func(i, j int) { shuffled[i], shuffled[j] = shuffled[j], shuffled[i] })
 
-	pipe := client.BrPopPush(ctx, 0)
-	for i := 0; i < holdCount; i++ {
-		seatID := shuffled[i]
-		pipe.HSet(ctx, "seats:event:1", seatID, "held:fragmentation-seed")
+	for idx := 0; idx < holdCount; idx += PipeSize {
+		end := idx + PipeSize
+		if end > holdCount {
+			end = holdCount
+		}
+		cmds := make(valkey.Commands, 0, end-idx)
+		for i := idx; i < end; i++ {
+			cmds = append(cmds, client.B().Hset().Key("seats:event:1").
+				FieldValue().FieldValue(shuffled[i], "held:fragmentation-seed").Build())
+		}
+		for _, res := range client.DoMulti(ctx, cmds...) {
+			if err := res.Error(); err != nil {
+				return fmt.Errorf("fragmentation seed: %w", err)
+			}
+		}
 	}
-	if err := pipe.Drain(ctx); err != nil {
-		return fmt.Errorf("fragmentation seed: %w", err)
-	}
+
 	log.Printf("Fragmentation applied: %d seats held", holdCount)
 	return nil
 }

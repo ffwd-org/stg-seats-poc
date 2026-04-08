@@ -2,7 +2,6 @@ package hub
 
 import (
 	"context"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -117,4 +116,42 @@ func (h *Hub) BroadcastCount(eventID string) int {
 // ConnCount returns total active connections.
 func (h *Hub) ConnCount() int64 {
 	return atomic.LoadInt64(&h.connCount)
+}
+
+// Unregister removes a connection from all rooms it belongs to.
+func (h *Hub) Unregister(c *conn.Conn) {
+	h.unregister <- c
+}
+
+// addToRoom adds a connection to the specified event room, creating it if needed.
+func (h *Hub) addToRoom(eventID string, c *conn.Conn) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	room, ok := h.rooms[eventID]
+	if !ok {
+		room = &Room{
+			ID:    eventID,
+			Conns: make(map[*conn.Conn]bool),
+		}
+		h.rooms[eventID] = room
+	}
+	room.Conns[c] = true
+	atomic.AddInt64(&h.connCount, 1)
+}
+
+// removeConn removes a connection from the room it belongs to.
+// If the room is empty after removal, it is deleted.
+func (h *Hub) removeConn(c *conn.Conn) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for id, room := range h.rooms {
+		if _, ok := room.Conns[c]; ok {
+			delete(room.Conns, c)
+			atomic.AddInt64(&h.connCount, -1)
+			if len(room.Conns) == 0 {
+				delete(h.rooms, id)
+			}
+			return
+		}
+	}
 }

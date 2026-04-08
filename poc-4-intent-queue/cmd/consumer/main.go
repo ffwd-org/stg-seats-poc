@@ -1,5 +1,3 @@
-//go:build ignore
-
 package main
 
 import (
@@ -9,8 +7,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/ffwd-org/stg-seats-poc/poc-4-intent-queue/internal/intent"
@@ -26,10 +27,13 @@ var (
 	flagRedpanda     string
 	flagConsumerName string
 	flagBatchSize    int
-	flagBatchTimeout time.Duration
+	flagBatchWait    time.Duration
+	flagConsumers    int
 	flagMetricsPort  int
 
-	consumed, errors atomic.Int64
+	consumed, errors   atomic.Int64
+	latencySum         atomic.Int64
+	latencyCount       atomic.Int64
 )
 
 func main() {
@@ -38,11 +42,12 @@ func main() {
 	fs.StringVar(&flagValkey, "valkey-addr", envOr("VALKEY_ADDR", "localhost:6379"), "Valkey address")
 	fs.StringVar(&flagNATS, "nats-url", "nats://localhost:4222", "NATS URL")
 	fs.StringVar(&flagRedpanda, "redpanda-brokers", "localhost:9092", "Redpanda brokers")
-	fs.StringVar(&flagConsumerName, "consumer", "cons1", "Consumer group name")
-	fs.IntVar(&flagBatchSize, "batch-size", 50, "Max intents per batch")
-	fs.DurationVar(&flagBatchTimeout, "batch-timeout", 100*time.Millisecond, "Flush batch after this")
+	fs.StringVar(&flagConsumerName, "consumer", "cons1", "Consumer name")
+	fs.IntVar(&flagBatchSize, "batch-size", 100, "Max intents per batch")
+	fs.DurationVar(&flagBatchWait, "batch-wait", 10*time.Millisecond, "Flush batch after this")
+	fs.IntVar(&flagConsumers, "consumers", 1, "Number of consumer goroutines")
 	fs.IntVar(&flagMetricsPort, "metrics-port", 2113, "Prometheus metrics port")
-	if err := fs.Parse(nil); err != nil {
+	if err := fs.Parse(os.Args[1:]); err != nil {
 		log.Fatal(err)
 	}
 
@@ -54,80 +59,154 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	log.Printf("Consumer — queue=%s batch=%d timeout=%s", flagQueue, flagBatchSize, flagBatchTimeout)
+	// Handle graceful shutdown
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		log.Println("shutting down...")
+		cancel()
+	}()
 
-	valkeyClient, err := valkey.NewClient(valkey.Option{InitAddress: []string{flagValkey}})
+	log.Printf("Consumer — queue=%s batch=%d wait=%s consumers=%d",
+		flagQueue, flagBatchSize, flagBatchWait, flagConsumers)
+
+	// Shared Valkey client for executing Lua hold scripts
+	valkeyClient, err := valkey.NewClient(valkey.ClientOption{InitAddress: []string{flagValkey}})
 	if err != nil {
 		log.Fatalf("valkey client: %v", err)
 	}
 	defer valkeyClient.Close()
 
-	holdSrc, _ := os.ReadFile("lua/hold_seat.lua")
-	holdScript := valkey.NewScript(string(holdSrc))
+	// Load hold_seat.lua
+	holdSrc, err := os.ReadFile("lua/hold_seat.lua")
+	if err != nil {
+		log.Fatalf("read lua script: %v", err)
+	}
+	holdSHA := loadScript(ctx, valkeyClient, string(holdSrc))
+	log.Printf("Loaded hold_seat.lua SHA=%s", holdSHA)
 
-	batch := make([]*intent.HoldIntent, 0, flagBatchSize)
-	batchTimer := time.NewTimer(flagBatchTimeout)
+	// Launch consumer goroutines
+	var wg sync.WaitGroup
+	for i := 0; i < flagConsumers; i++ {
+		wg.Add(1)
+		consName := fmt.Sprintf("%s-%d", flagConsumerName, i)
+		go func(name string) {
+			defer wg.Done()
+			runConsumer(ctx, name, valkeyClient, holdSHA)
+		}(consName)
+	}
 
-	for {
-		select {
-		case <-ctx.Done():
-			if len(batch) > 0 {
-				executeBatch(ctx, valkeyClient, holdScript, batch)
-			}
-			return
-		case <-batchTimer.C:
-			if len(batch) > 0 {
-				executeBatch(ctx, valkeyClient, holdScript, batch)
-				batch = batch[:0]
-			}
-			batchTimer.Reset(flagBatchTimeout)
-		default:
-			h, err := readOne(ctx)
-			if err != nil {
-				time.Sleep(10 * time.Millisecond)
-				continue
-			}
-			batch = append(batch, h)
-			if len(batch) >= flagBatchSize {
-				executeBatch(ctx, valkeyClient, holdScript, batch)
-				batch = batch[:0]
-				batchTimer.Reset(flagBatchTimeout)
+	// Periodic stats reporter
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				c := consumed.Load()
+				e := errors.Load()
+				lc := latencyCount.Load()
+				var avgUs int64
+				if lc > 0 {
+					avgUs = (latencySum.Load() / lc) / 1000 // nanos → micros
+				}
+				log.Printf("consumed=%d errors=%d avg_latency=%dµs", c, e, avgUs)
 			}
 		}
-	}
+	}()
+
+	wg.Wait()
+	log.Printf("FINAL consumed=%d errors=%d", consumed.Load(), errors.Load())
 }
 
-func readOne(ctx context.Context) (*intent.HoldIntent, error) {
+func runConsumer(ctx context.Context, name string, valkeyClient valkey.Client, holdSHA string) {
+	var cons queue.Consumer
+	var err error
+
 	switch flagQueue {
 	case "valkey-streams":
-		c, err := queue.NewValkeyStreamsConsumer(ctx, flagValkey, "seat:holds:stream", "poc4-group", flagConsumerName)
-		if err != nil {
-			return nil, err
-		}
-		defer c.Close()
-		records, err := c.ReadGroup(ctx, "seat:holds:stream", flagConsumerName, 1)
-		if err != nil || len(records) < 2 {
-			return nil, fmt.Errorf("no message")
-		}
-		return intent.Decode([]byte(records[1]))
+		cons, err = queue.NewValkeyStreamsConsumer(ctx, flagValkey, "poc4-group", name)
+	case "nats":
+		cons, err = queue.NewNATSConsumer(ctx, flagNATS, name)
+	case "redpanda":
+		cons, err = queue.NewRedpandaConsumer(ctx, strings.Split(flagRedpanda, ","), "poc4-group")
 	default:
-		return nil, fmt.Errorf("unsupported queue: %s", flagQueue)
+		log.Fatalf("unsupported queue: %s", flagQueue)
+	}
+	if err != nil {
+		log.Fatalf("consumer %s setup: %v", name, err)
+	}
+	defer cons.Close()
+
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+
+		intents, fetchErr := cons.FetchBatch(ctx, flagBatchSize)
+		if fetchErr != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			log.Printf("consumer %s fetch: %v", name, fetchErr)
+			time.Sleep(flagBatchWait)
+			continue
+		}
+		if len(intents) == 0 {
+			time.Sleep(flagBatchWait)
+			continue
+		}
+
+		executeBatchPipelined(ctx, valkeyClient, holdSHA, intents)
 	}
 }
 
-func executeBatch(ctx context.Context, client valkey.Client, script *valkey.Script, batch []*intent.HoldIntent) {
+// executeBatchPipelined uses DoMulti to pipeline all EVALSHA calls in one round trip.
+func executeBatchPipelined(ctx context.Context, client valkey.Client, holdSHA string, batch []*intent.HoldIntent) {
+	now := time.Now().UnixNano()
+
+	cmds := make(valkey.Commands, 0, len(batch))
 	for _, h := range batch {
 		seatKey := fmt.Sprintf("seats:event:%d", h.EventID)
 		seatID := fmt.Sprintf("seat:%05d", h.SeatID)
-		_, err := script.Exec(ctx, client,
-			[]string{seatKey},
-			[]interface{}{seatID, string(h.HoldToken[:]), h.TTLSeconds, h.NowUnix}).ToString()
-		if err != nil {
-			errors.Add(1)
-			continue
+		userID := fmt.Sprintf("%d", h.UserID)
+		ttl := fmt.Sprintf("%d", h.HoldTTL)
+		nowStr := fmt.Sprintf("%d", time.Now().Unix())
+
+		cmd := client.B().Evalsha().Sha1(holdSHA).Numkeys(1).Key(seatKey).Arg(seatID, userID, ttl, nowStr).Build()
+		cmds = append(cmds, cmd)
+
+		// Record e2e latency
+		if h.Timestamp > 0 {
+			e2eNanos := now - int64(h.Timestamp)
+			if e2eNanos > 0 {
+				latencySum.Add(e2eNanos)
+				latencyCount.Add(1)
+			}
 		}
-		consumed.Add(1)
 	}
+
+	results := client.DoMulti(ctx, cmds...)
+	for _, res := range results {
+		if res.Error() != nil {
+			errors.Add(1)
+		} else {
+			consumed.Add(1)
+		}
+	}
+}
+
+// loadScript does SCRIPT LOAD and returns the SHA.
+func loadScript(ctx context.Context, client valkey.Client, script string) string {
+	cmd := client.B().ScriptLoad().Script(script).Build()
+	sha, err := client.Do(ctx, cmd).ToString()
+	if err != nil {
+		log.Fatalf("SCRIPT LOAD: %v", err)
+	}
+	return sha
 }
 
 func envOr(key, fallback string) string {

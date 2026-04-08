@@ -2,9 +2,10 @@ services:
   centrifugo:
     image: centrifugo/centrifugo:v5
     container_name: centrifugo
-    command: centrifugo server --config=/centrifugo/config.json
+    command: centrifugo -c /centrifugo/config.json
     ports:
       - "8000:8000"
+      - "9000:9000"
     volumes:
       - ./cmd/centrifugo/config.json:/centrifugo/config.json
     depends_on:
@@ -16,3 +17,13 @@ services:
     ports:
       - "6379:6379"
     command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - centrifugo

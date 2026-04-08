@@ -28,13 +28,13 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "rate(poc_ops_total{poc=\"poc1\",result=\"ok\"}[30s])",
+          "expr": "rate(poc_ops_total{poc=\"poc1-hset\",result=\"ok\"}[30s])",
           "legendFormat": "hset",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "rate(poc_ops_total{poc=\"poc1\",result=\"ok\"}[30s])",
+          "expr": "rate(poc_ops_total{poc=\"poc1-bitfield\",result=\"ok\"}[30s])",
           "legendFormat": "bitfield",
           "refId": "B"
         }
@@ -57,21 +57,39 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.50, rate(poc_latency_seconds_bucket{poc=\"poc1\"}[30s])) * 1000",
-          "legendFormat": "p50",
+          "expr": "histogram_quantile(0.50, rate(poc_latency_seconds_bucket{poc=\"poc1-hset\"}[30s])) * 1000",
+          "legendFormat": "hset p50",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.95, rate(poc_latency_seconds_bucket{poc=\"poc1\"}[30s])) * 1000",
-          "legendFormat": "p95",
+          "expr": "histogram_quantile(0.95, rate(poc_latency_seconds_bucket{poc=\"poc1-hset\"}[30s])) * 1000",
+          "legendFormat": "hset p95",
           "refId": "B"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.99, rate(poc_latency_seconds_bucket{poc=\"poc1\"}[30s])) * 1000",
-          "legendFormat": "p99",
+          "expr": "histogram_quantile(0.99, rate(poc_latency_seconds_bucket{poc=\"poc1-hset\"}[30s])) * 1000",
+          "legendFormat": "hset p99",
           "refId": "C"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.50, rate(poc_latency_seconds_bucket{poc=\"poc1-bitfield\"}[30s])) * 1000",
+          "legendFormat": "bitfield p50",
+          "refId": "D"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.95, rate(poc_latency_seconds_bucket{poc=\"poc1-bitfield\"}[30s])) * 1000",
+          "legendFormat": "bitfield p95",
+          "refId": "E"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.99, rate(poc_latency_seconds_bucket{poc=\"poc1-bitfield\"}[30s])) * 1000",
+          "legendFormat": "bitfield p99",
+          "refId": "F"
         }
       ],
       "title": "Latency Percentiles (ms)",
@@ -135,9 +153,15 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "rate(poc_ops_total{poc=\"poc1\",result=\"error\"}[30s]) / (rate(poc_ops_total{poc=\"poc1\"}[30s]) + 1e-9)",
-          "legendFormat": "Error Rate",
+          "expr": "rate(poc_ops_total{poc=\"poc1-hset\",result=\"error\"}[30s]) / (rate(poc_ops_total{poc=\"poc1-hset\"}[30s]) + 1e-9)",
+          "legendFormat": "hset error rate",
           "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(poc_ops_total{poc=\"poc1-bitfield\",result=\"error\"}[30s]) / (rate(poc_ops_total{poc=\"poc1-bitfield\"}[30s]) + 1e-9)",
+          "legendFormat": "bitfield error rate",
+          "refId": "B"
         }
       ],
       "title": "Error Rate %",

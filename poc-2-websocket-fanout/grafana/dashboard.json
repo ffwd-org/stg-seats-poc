@@ -172,7 +172,7 @@
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "expr": "go_memstats_rss_bytes{poc=\"poc2\"}",
+          "expr": "process_resident_memory_bytes{job=\"poc2\"}",
           "legendFormat": "RSS",
           "refId": "A"
         }
@@ -201,6 +201,29 @@
         }
       ],
       "title": "GC Pause Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Total dropped WebSocket connections over time",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"fixedColor": "red", "mode": "fixed"},
+          "unit": "none",
+          "min": 0
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 27},
+      "id": 10,
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "rate(poc2_dropped_connections_total[10s])",
+          "legendFormat": "dropped/sec",
+          "refId": "A"
+        }
+      ],
+      "title": "Dropped Connections",
       "type": "timeseries"
     }
   ],

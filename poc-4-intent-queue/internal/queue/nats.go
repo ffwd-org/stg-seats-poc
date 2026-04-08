@@ -3,18 +3,25 @@ package queue
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"github.com/ffwd-org/stg-seats-poc/poc-4-intent-queue/internal/intent"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
+const (
+	natsSubject    = "seats.holds"
+	natsStreamName = "SEAT_HOLDS"
+)
+
 // NATSProducer produces intents to NATS JetStream.
 type NATSProducer struct {
+	nc *nats.Conn
 	js jetstream.JetStream
 }
 
-// NewNATSProducer creates a NATS JetStream producer.
-// url: e.g. "nats://10.10.0.5:4222"
+// NewNATSProducer creates a NATS JetStream producer and ensures the stream exists.
 func NewNATSProducer(ctx context.Context, url string) (*NATSProducer, error) {
 	nc, err := nats.Connect(url)
 	if err != nil {
@@ -22,81 +29,87 @@ func NewNATSProducer(ctx context.Context, url string) (*NATSProducer, error) {
 	}
 	js, err := jetstream.New(nc)
 	if err != nil {
+		nc.Close()
 		return nil, fmt.Errorf("nats jetstream: %w", err)
 	}
-	return &NATSProducer{js: js}, nil
+
+	// Ensure stream exists
+	_, err = js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
+		Name:     natsStreamName,
+		Subjects: []string{natsSubject},
+		MaxMsgs:  1_000_000,
+	})
+	if err != nil {
+		nc.Close()
+		return nil, fmt.Errorf("nats create stream: %w", err)
+	}
+
+	return &NATSProducer{nc: nc, js: js}, nil
 }
 
-func (p *NATSProducer) Publish(ctx context.Context, subject string, data []byte) error {
-	_, err := p.js.Publish(ctx, subject, data)
+func (p *NATSProducer) Send(ctx context.Context, h *intent.HoldIntent) error {
+	buf := make([]byte, intent.IntentSize)
+	intent.Encode(h, buf)
+	_, err := p.js.Publish(ctx, natsSubject, buf)
 	return err
 }
 
 func (p *NATSProducer) Close() error {
+	p.nc.Close()
 	return nil
 }
 
-// NATSConsumer consumes intents from NATS JetStream.
+// NATSConsumer consumes intents from NATS JetStream using pull-based consumption.
 type NATSConsumer struct {
-	js      jetstream.JetStream
-	stream  string
-	subject string
+	nc  *nats.Conn
+	con jetstream.Consumer
 }
 
-func NewNATSStream(ctx context.Context, url, streamName, subject string) error {
-	nc, err := nats.Connect(url)
-	if err != nil {
-		return fmt.Errorf("nats connect: %w", err)
-	}
-	js, err := jetstream.New(nc)
-	if err != nil {
-		return fmt.Errorf("nats jetstream: %w", err)
-	}
-
-	// Ensure stream exists
-	s, _ := js.Stream(ctx, streamName)
-	if s == nil {
-		_, err = js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
-			Name:     streamName,
-			Subjects: []string{subject},
-			MaxMsgs:  1_000_000,
-		})
-		if err != nil {
-			return fmt.Errorf("create stream: %w", err)
-		}
-	}
-	return nil
-}
-
-func NewNATSConsumer(ctx context.Context, url, streamName, consumerName string) (*NATSConsumer, error) {
+func NewNATSConsumer(ctx context.Context, url, consumerName string) (*NATSConsumer, error) {
 	nc, err := nats.Connect(url)
 	if err != nil {
 		return nil, fmt.Errorf("nats connect: %w", err)
 	}
 	js, err := jetstream.New(nc)
 	if err != nil {
+		nc.Close()
 		return nil, fmt.Errorf("nats jetstream: %w", err)
 	}
-	return &NATSConsumer{js: js, stream: streamName}, nil
-}
 
-func (c *NATSConsumer) Consume(ctx context.Context, handler func(data []byte) error) error {
-	cons, err := c.js.Consume(ctx, c.stream, jetstream.ConsumeConfig{
-		// Pull-based consumer for batch efficiency
+	con, err := js.CreateOrUpdateConsumer(ctx, natsStreamName, jetstream.ConsumerConfig{
+		Durable:       consumerName,
+		AckPolicy:     jetstream.AckExplicitPolicy,
+		DeliverPolicy: jetstream.DeliverNewPolicy,
+		AckWait:       5 * time.Second,
 	})
 	if err != nil {
-		return err
+		nc.Close()
+		return nil, fmt.Errorf("nats create consumer: %w", err)
 	}
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case msg := <-cons.Messages():
-			if err := handler(msg.Data()); err != nil {
-				msg.Nak()
-				continue
-			}
-			msg.Ack()
+
+	return &NATSConsumer{nc: nc, con: con}, nil
+}
+
+func (c *NATSConsumer) FetchBatch(ctx context.Context, maxBatch int) ([]*intent.HoldIntent, error) {
+	msgs, err := c.con.Fetch(maxBatch, jetstream.FetchMaxWait(time.Second))
+	if err != nil {
+		return nil, fmt.Errorf("nats fetch: %w", err)
+	}
+
+	var intents []*intent.HoldIntent
+	for msg := range msgs.Messages() {
+		h, decErr := intent.Decode(msg.Data())
+		if decErr != nil {
+			_ = msg.Nak()
+			continue
 		}
+		_ = msg.Ack()
+		intents = append(intents, h)
 	}
+	return intents, msgs.Error()
+}
+
+func (c *NATSConsumer) Close() error {
+	c.nc.Close()
+	return nil
 }

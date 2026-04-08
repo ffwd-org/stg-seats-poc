@@ -1,0 +1,26 @@
+# Compiled binaries
+*/consumer
+*/direct
+*/producer
+*/loadgen
+*/wsserver
+*/conngen
+*/broadcaster
+*/seed
+bin/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Elixir
+_build/
+deps/
+*.beam
+
+# Go
+*.exe

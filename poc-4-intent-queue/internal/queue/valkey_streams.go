@@ -2,32 +2,37 @@ package queue
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"time"
 
+	"github.com/ffwd-org/stg-seats-poc/poc-4-intent-queue/internal/intent"
 	"github.com/valkey-io/valkey-go"
 )
 
-// ValkeyStreamsProducer produces intents to Valkey Streams.
+const valkeyStream = "seat:holds:stream"
+
+// ValkeyStreamsProducer produces intents to Valkey Streams using XADD.
 type ValkeyStreamsProducer struct {
 	client valkey.Client
 }
 
 // NewValkeyStreamsProducer connects to the existing Valkey node.
-func NewValkeyStreamsProducer(ctx context.Context, addr string) (*ValkeyStreamsProducer, error) {
-	client, err := valkey.NewClient(valkey.Option{InitAddress: []string{addr}})
+func NewValkeyStreamsProducer(_ context.Context, addr string) (*ValkeyStreamsProducer, error) {
+	client, err := valkey.NewClient(valkey.ClientOption{InitAddress: []string{addr}})
 	if err != nil {
 		return nil, fmt.Errorf("valkey streams producer: %w", err)
 	}
 	return &ValkeyStreamsProducer{client: client}, nil
 }
 
-func (p *ValkeyStreamsProducer) XAdd(ctx context.Context, stream, id string, fields map[string]interface{}) error {
-	return p.client.XAdd(ctx, &valkey.XAddArgs{
-		Stream: stream,
-		ID:     id,
-		Values: fields,
-	}).Err()
+func (p *ValkeyStreamsProducer) Send(ctx context.Context, h *intent.HoldIntent) error {
+	buf := make([]byte, intent.IntentSize)
+	intent.Encode(h, buf)
+	encoded := hex.EncodeToString(buf)
+
+	cmd := p.client.B().Xadd().Key(valkeyStream).Id("*").FieldValue().FieldValue("data", encoded).Build()
+	return p.client.Do(ctx, cmd).Error()
 }
 
 func (p *ValkeyStreamsProducer) Close() error {
@@ -37,43 +42,68 @@ func (p *ValkeyStreamsProducer) Close() error {
 
 // ValkeyStreamsConsumer consumes from Valkey Streams via XREADGROUP.
 type ValkeyStreamsConsumer struct {
-	client valkey.Client
-	group  string
+	client   valkey.Client
+	stream   string
+	group    string
+	consumer string
 }
 
 // NewValkeyStreamsConsumer creates a consumer group reader on the given stream.
-func NewValkeyStreamsConsumer(ctx context.Context, addr, stream, group, consumer string) (*ValkeyStreamsConsumer, error) {
-	client, err := valkey.NewClient(valkey.Option{InitAddress: []string{addr}})
+func NewValkeyStreamsConsumer(ctx context.Context, addr, group, consumer string) (*ValkeyStreamsConsumer, error) {
+	client, err := valkey.NewClient(valkey.ClientOption{InitAddress: []string{addr}})
 	if err != nil {
 		return nil, fmt.Errorf("valkey streams consumer: %w", err)
 	}
-	// Create consumer group if not exists
-	client.XGroupCreateMkStream(ctx, stream, group, "0")
-	return &ValkeyStreamsConsumer{client: client, group: group}, nil
+
+	// Create consumer group if not exists (ignore error if already exists)
+	createCmd := client.B().XgroupCreate().Key(valkeyStream).Group(group).Id("0").Mkstream().Build()
+	_ = client.Do(ctx, createCmd).Error()
+
+	return &ValkeyStreamsConsumer{
+		client:   client,
+		stream:   valkeyStream,
+		group:    group,
+		consumer: consumer,
+	}, nil
 }
 
-// ReadGroup reads new messages from the stream.
-// Returns messages in format: []string{key, value, key, value, ...}
-func (c *ValkeyStreamsConsumer) ReadGroup(ctx context.Context, stream, consumer string, count int64) ([]string, error) {
-	result, err := c.client.XReadGroup(ctx, &valkey.XReadGroupArgs{
-		Streams:  []string{stream, ">"},
-		Groups:   []string{c.group + " " + consumer},
-		Count:    count,
-		Block:    time.Second,
-	}).ToMap()
+func (c *ValkeyStreamsConsumer) FetchBatch(ctx context.Context, maxBatch int) ([]*intent.HoldIntent, error) {
+	cmd := c.client.B().Xreadgroup().
+		Group(c.group, c.consumer).
+		Count(int64(maxBatch)).
+		Block(time.Second.Milliseconds()).
+		Streams().Key(c.stream).Id(">").
+		Build()
+
+	result, err := c.client.Do(ctx, cmd).AsXRead()
 	if err != nil {
-		return nil, err
+		// Timeout returns nil — not an error for us
+		if valkey.IsValkeyNil(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("xreadgroup: %w", err)
 	}
 
-	var flat []string
+	var intents []*intent.HoldIntent
 	for streamName, messages := range result {
 		_ = streamName
 		for _, msg := range messages {
-			flat = append(flat, msg.ID)
-			flat = append(flat, msg.Values["data"])
+			dataStr, ok := msg.FieldValues["data"]
+			if !ok {
+				continue
+			}
+			raw, decErr := hex.DecodeString(dataStr)
+			if decErr != nil {
+				continue
+			}
+			h, decErr := intent.Decode(raw)
+			if decErr != nil {
+				continue
+			}
+			intents = append(intents, h)
 		}
 	}
-	return flat, nil
+	return intents, nil
 }
 
 func (c *ValkeyStreamsConsumer) Close() error {

@@ -5,42 +5,43 @@ import (
 	"fmt"
 )
 
-// HoldIntent represents a seat hold operation.
+// HoldIntent represents a seat hold operation — 32 bytes on the wire.
 type HoldIntent struct {
-	EventID    uint64
-	SeatID     uint64
-	HoldToken  [16]byte
-	TTLSeconds uint32
-	NowUnix    uint64
+	EventID   uint64  // 8 bytes
+	SeatID    uint32  // 4 bytes
+	UserID    uint64  // 8 bytes
+	HoldTTL   uint16  // 2 bytes (seconds)
+	Timestamp uint64  // 8 bytes (unix nanos)
+	_pad      [2]byte // 2 bytes padding → total 32
 }
 
-// Encode encodes a HoldIntent into 44 bytes:
-// - eventID: 8 bytes (uint64, BE)
-// - seatID: 8 bytes (uint64, BE)
-// - holdToken: 16 bytes
-// - ttl: 4 bytes (uint32, BE)
-// - now: 8 bytes (uint64, BE)
-func Encode(h *HoldIntent) []byte {
-	b := make([]byte, 44)
-	binary.BigEndian.PutUint64(b[0:8], h.EventID)
-	binary.BigEndian.PutUint64(b[8:16], h.SeatID)
-	copy(b[16:32], h.HoldToken[:])
-	binary.BigEndian.PutUint32(b[32:36], h.TTLSeconds)
-	binary.BigEndian.PutUint64(b[36:44], h.NowUnix)
-	return b
+const IntentSize = 32
+
+// Encode encodes a HoldIntent into buf (must be >= 32 bytes).
+// Zero-allocation: caller provides the buffer.
+func Encode(h *HoldIntent, buf []byte) {
+	_ = buf[IntentSize-1] // bounds check hint
+	binary.LittleEndian.PutUint64(buf[0:8], h.EventID)
+	binary.LittleEndian.PutUint32(buf[8:12], h.SeatID)
+	binary.LittleEndian.PutUint64(buf[12:20], h.UserID)
+	binary.LittleEndian.PutUint16(buf[20:22], h.HoldTTL)
+	binary.LittleEndian.PutUint64(buf[22:30], h.Timestamp)
+	// bytes 30-31 are padding, zero them
+	buf[30] = 0
+	buf[31] = 0
 }
 
-// Decode decodes a 44-byte slice back into a HoldIntent.
+// Decode decodes a 32-byte slice back into a HoldIntent.
 func Decode(b []byte) (*HoldIntent, error) {
-	if len(b) < 44 {
-		return nil, fmt.Errorf("intent: buffer too short: %d bytes", len(b))
+	if len(b) < IntentSize {
+		return nil, fmt.Errorf("intent: buffer too short: %d bytes (need %d)", len(b), IntentSize)
 	}
 	h := &HoldIntent{
-		EventID:    binary.BigEndian.Uint64(b[0:8]),
-		SeatID:     binary.BigEndian.Uint64(b[8:16]),
-		TTLSeconds: binary.BigEndian.Uint32(b[32:36]),
-		NowUnix:    binary.BigEndian.Uint64(b[36:44]),
+		EventID:   binary.LittleEndian.Uint64(b[0:8]),
+		SeatID:    binary.LittleEndian.Uint32(b[8:12]),
+		UserID:    binary.LittleEndian.Uint64(b[12:20]),
+		HoldTTL:   binary.LittleEndian.Uint16(b[20:22]),
+		Timestamp: binary.LittleEndian.Uint64(b[22:30]),
 	}
-	copy(h.HoldToken[:], b[16:32])
 	return h, nil
 }

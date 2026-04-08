@@ -1,13 +1,11 @@
-//go:build ignore
-
 package main
 
 import (
 	"context"
-	"crypto/rand"
 	"flag"
 	"fmt"
 	"log"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"strings"
@@ -17,42 +15,20 @@ import (
 	"github.com/ffwd-org/stg-seats-poc/poc-4-intent-queue/internal/intent"
 	"github.com/ffwd-org/stg-seats-poc/poc-4-intent-queue/internal/queue"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/valkey-io/valkey-go"
 )
 
 var (
-	flagQueue      string
-	flagRate       int
-	flagValkey     string
-	flagNATS       string
-	flagRedpanda   string
+	flagQueue       string
+	flagRate        int
+	flagValkey      string
+	flagNATS        string
+	flagRedpanda    string
 	flagMetricsPort int
 	flagDuration    time.Duration
 	flagEventID     uint64
 
 	produced, errors atomic.Int64
 )
-
-type Producer interface {
-	Send(ctx context.Context, h *intent.HoldIntent) error
-	Close() error
-}
-
-type DirectProducer struct{ valkeyAddr string }
-
-func (p *DirectProducer) Send(ctx context.Context, h *intent.HoldIntent) error {
-	client, err := valkey.NewClient(valkey.Option{InitAddress: []string{p.valkeyAddr}})
-	if err != nil {
-		return err
-	}
-	defer client.Close()
-	seatKey := fmt.Sprintf("seats:event:%d", h.EventID)
-	seatID := fmt.Sprintf("seat:%05d", h.SeatID)
-	val := fmt.Sprintf("held:%s::%d", string(h.HoldToken[:8]), h.NowUnix)
-	return client.HSet(ctx, seatKey, seatID, val).Err()
-}
-
-func (p *DirectProducer) Close() error { return nil }
 
 func main() {
 	fs := flag.NewFlagSet("producer", flag.ContinueOnError)
@@ -64,7 +40,7 @@ func main() {
 	fs.DurationVar(&flagDuration, "duration", 60*time.Second, "test duration")
 	fs.Uint64Var(&flagEventID, "event-id", 1, "event ID")
 	fs.IntVar(&flagMetricsPort, "metrics-port", 2112, "Prometheus metrics port")
-	if err := fs.Parse(nil); err != nil {
+	if err := fs.Parse(os.Args[1:]); err != nil {
 		log.Fatal(err)
 	}
 
@@ -78,7 +54,7 @@ func main() {
 
 	log.Printf("Producer — queue=%s rate=%d/s duration=%s", flagQueue, flagRate, flagDuration)
 
-	var q Producer
+	var q queue.Producer
 	var err error
 
 	switch flagQueue {
@@ -89,16 +65,14 @@ func main() {
 	case "redpanda":
 		q, err = queue.NewRedpandaProducer(ctx, strings.Split(flagRedpanda, ","))
 	case "direct":
-		q = &DirectProducer{valkeyAddr: flagValkey}
+		log.Fatal("direct mode — use cmd/direct instead")
 	default:
 		log.Fatalf("unknown queue: %s", flagQueue)
 	}
 	if err != nil {
 		log.Fatalf("producer setup: %v", err)
 	}
-	if q != nil {
-		defer q.Close()
-	}
+	defer q.Close()
 
 	ticker := time.NewTicker(time.Second / time.Duration(flagRate))
 	defer ticker.Stop()
@@ -112,7 +86,7 @@ func main() {
 			i++
 			go func(seq uint64) {
 				h := makeIntent(flagEventID, seq)
-				if err := q.Send(ctx, h); err != nil {
+				if sendErr := q.Send(ctx, h); sendErr != nil {
 					errors.Add(1)
 					return
 				}
@@ -126,14 +100,12 @@ done:
 }
 
 func makeIntent(eventID, seq uint64) *intent.HoldIntent {
-	var tok [16]byte
-	rand.Read(tok[:])
 	return &intent.HoldIntent{
-		EventID:    eventID,
-		SeatID:     seq % 100_000,
-		HoldToken:  tok,
-		TTLSeconds: 60,
-		NowUnix:    uint64(time.Now().Unix()),
+		EventID:   eventID,
+		SeatID:    uint32(seq % 100_000),
+		UserID:    rand.Uint64(),
+		HoldTTL:   60,
+		Timestamp: uint64(time.Now().UnixNano()),
 	}
 }
 

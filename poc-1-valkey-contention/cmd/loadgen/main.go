@@ -22,7 +22,9 @@ import (
 	"github.com/ffwd-org/stg-seats-poc/pkg/metrics"
 )
 
-const pocName = "poc1"
+// pocLabel is set at runtime to "poc1-hset" or "poc1-bitfield" so that
+// Prometheus time series are distinguishable per mode.
+var pocLabel string
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -38,7 +40,7 @@ func run(args []string) error {
 	seats := fs.Int("seats", 100000, "total seat count")
 	ramp := fs.String("ramp", "100,1000,5000,10000,25000,50000,100000", "comma-separated worker counts")
 	metricsPort := fs.Int("metrics-port", 2112, "Prometheus metrics port")
-	stageDur := fs.Duration("stage-duration", 60*time.Second, "duration per ramp stage")
+	stageDur := fs.Duration("duration", 60*time.Second, "duration per ramp stage")
 	cooldown := fs.Duration("cooldown", 10*time.Second, "pause between stages")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -46,6 +48,9 @@ func run(args []string) error {
 	if *mode == "" {
 		return fmt.Errorf("--mode is required (hset or bitfield)")
 	}
+
+	// Build the Prometheus poc label to differentiate HSET vs BITFIELD runs.
+	pocLabel = fmt.Sprintf("poc1-%s", *mode)
 
 	workerCounts, err := parseRamp(*ramp)
 	if err != nil {
@@ -84,11 +89,11 @@ func run(args []string) error {
 	// OpsTotal uses labels {"poc", "result"} per pkg/metrics/reporter.go
 	// LatencyHist uses labels {"poc", "operation"} per pkg/metrics/reporter.go
 	// ActiveWorkers uses labels {"poc"}
-	metrics.OpsTotal.WithLabelValues(pocName, "ok")
-	metrics.OpsTotal.WithLabelValues(pocName, "error")
-	metrics.OpsTotal.WithLabelValues(pocName, "contention")
-	metrics.LatencyHist.WithLabelValues(pocName, "hold")
-	metrics.ActiveWorkers.WithLabelValues(pocName)
+	metrics.OpsTotal.WithLabelValues(pocLabel, "ok")
+	metrics.OpsTotal.WithLabelValues(pocLabel, "error")
+	metrics.OpsTotal.WithLabelValues(pocLabel, "contention")
+	metrics.LatencyHist.WithLabelValues(pocLabel, "hold")
+	metrics.ActiveWorkers.WithLabelValues(pocLabel)
 
 	slog.Info("starting load test", "mode", *mode, "seats", *seats, "stages", workerCounts)
 
@@ -162,7 +167,7 @@ func (s *latencyStore) percentiles() (p50, p95, p99 float64) {
 var lats = newLatencyStore(2_000_000)
 
 func runStage(ctx context.Context, client valkey.Client, nWorkers int, scripts *loadedScripts, mode string, seatCount int, dur time.Duration) stageResult {
-	metrics.ActiveWorkers.WithLabelValues(pocName).Set(float64(nWorkers))
+	metrics.ActiveWorkers.WithLabelValues(pocLabel).Set(float64(nWorkers))
 	lats.reset()
 
 	var totalOps, totalErrors atomic.Int64
@@ -216,7 +221,7 @@ func runStage(ctx context.Context, client valkey.Client, nWorkers int, scripts *
 	errs := totalErrors.Load()
 	p50, p95, p99 := lats.percentiles()
 
-	metrics.ActiveWorkers.WithLabelValues(pocName).Set(0)
+	metrics.ActiveWorkers.WithLabelValues(pocLabel).Set(0)
 
 	return stageResult{
 		Workers:      nWorkers,
@@ -284,20 +289,20 @@ func runWorker(ctx context.Context, client valkey.Client, workerID int, scripts 
 
 		latency := time.Since(opStart).Seconds()
 		lats.add(latency)
-		metrics.LatencyHist.WithLabelValues(pocName, "hold").Observe(latency)
+		metrics.LatencyHist.WithLabelValues(pocLabel, "hold").Observe(latency)
 
 		if execErr != nil {
 			totalErrors.Add(1)
-			metrics.OpsTotal.WithLabelValues(pocName, "error").Inc()
+			metrics.OpsTotal.WithLabelValues(pocLabel, "error").Inc()
 			continue
 		}
 		if code == 0 {
-			metrics.OpsTotal.WithLabelValues(pocName, "contention").Inc()
+			metrics.OpsTotal.WithLabelValues(pocLabel, "contention").Inc()
 			continue
 		}
 
 		totalOps.Add(1)
-		metrics.OpsTotal.WithLabelValues(pocName, "ok").Inc()
+		metrics.OpsTotal.WithLabelValues(pocLabel, "ok").Inc()
 	}
 }
 
