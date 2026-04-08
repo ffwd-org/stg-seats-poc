@@ -303,6 +303,14 @@ func runWorker(ctx context.Context, client valkey.Client, workerID int, scripts 
 
 		totalOps.Add(1)
 		metrics.OpsTotal.WithLabelValues(pocLabel, "ok").Inc()
+
+		// Release seat immediately so it can be re-held — measures true throughput
+		switch mode {
+		case "hset":
+			client.Do(ctx, client.B().Hset().Key("seats:event:1").FieldValue().FieldValue(fmt.Sprintf("seat:%05d", seatIdx+1), "available").Build())
+		case "bitfield":
+			client.Do(ctx, client.B().Bitfield().Key("seats:event:1:bits").Set("u2", int64(seatIdx*2), 0).Build())
+		}
 	}
 }
 
