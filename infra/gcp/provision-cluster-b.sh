@@ -12,7 +12,7 @@ echo "[cluster-b] Provisioning in $ZONE (project: $PROJECT)..."
 echo "[cluster-b] Creating app server (m3-standard-8, 64GB RAM, SPOT)..."
 gcloud compute instances create poc-appserver \
   --zone="$ZONE" \
-  --machine-type=m3-standard-8 \
+  --machine-type=c3-highmem-8 \
   --image-family=ubuntu-2404-lts-amd64 \
   --image-project=ubuntu-os-cloud \
   --boot-disk-size=50GB \
