@@ -5,8 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -57,6 +59,20 @@ func main() {
 		http.ListenAndServe(fmt.Sprintf(":%d", flagMetricsPort), nil)
 	}()
 
+	// Parse source IPs for multi-IP connections (needed for >64K conns)
+	var sourceIPs []net.IP
+	if flagSourceIPs != "" {
+		for _, s := range strings.Split(flagSourceIPs, ",") {
+			s = strings.TrimSpace(s)
+			ip := net.ParseIP(s)
+			if ip == nil {
+				log.Fatalf("invalid source IP: %s", s)
+			}
+			sourceIPs = append(sourceIPs, ip)
+		}
+		log.Printf("Using %d source IPs for connections", len(sourceIPs))
+	}
+
 	log.Printf("Connecting %d clients to Centrifugo at %d/sec (channel=%s)", flagConnections, flagRampRate, flagChannel)
 
 	var wg sync.WaitGroup
@@ -66,7 +82,11 @@ func main() {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			runClient(id)
+			var srcIP net.IP
+			if len(sourceIPs) > 0 {
+				srcIP = sourceIPs[id%len(sourceIPs)]
+			}
+			runClient(id, srcIP)
 		}(i)
 
 		if delayPerConn > 0 {
@@ -79,7 +99,7 @@ func main() {
 	select {} // hold forever
 }
 
-func runClient(id int) {
+func runClient(id int, srcIP net.IP) {
 	userID := fmt.Sprintf("user-%d", id)
 	token, err := generateJWT(flagJWTSecret, userID)
 	if err != nil {
@@ -88,6 +108,13 @@ func runClient(id int) {
 	}
 
 	dialer := websocket.Dialer{}
+	if srcIP != nil {
+		dialer.NetDial = func(network, addr string) (net.Conn, error) {
+			localAddr := &net.TCPAddr{IP: srcIP}
+			d := net.Dialer{LocalAddr: localAddr}
+			return d.Dial(network, addr)
+		}
+	}
 	ws, _, err := dialer.Dial(flagTarget, nil)
 	if err != nil {
 		log.Printf("[client %d] dial error: %v", id, err)
