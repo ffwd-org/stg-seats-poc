@@ -15,8 +15,7 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=2h'
-      - '--scrape.interval=1s'
-      - '--query.max-concurrency=10'
+      - '--web.enable-lifecycle'
     restart: unless-stopped
 
   grafana:
@@ -28,8 +27,8 @@ services:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - GF_SERVER_ROOT_URL=http://localhost:3000
+    user: "0"
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards
-      - ./grafana-data:/var/lib/grafana
     restart: unless-stopped
