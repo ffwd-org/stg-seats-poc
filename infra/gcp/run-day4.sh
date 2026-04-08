@@ -46,8 +46,11 @@ gsutil -m cp -r "$BUCKET/cluster-c/" ./results/day4/ 2>&1 | tail -5
 echo "Results in ./results/day4/"
 
 echo ""
-read -p "Tear down Cluster C VMs? [y/N] " -n 1 -r
-echo ""
-[[ $REPLY =~ ^[Yy]$ ]] && "$SCRIPT_DIR/teardown-gcp.sh"
+if [ "${1:-}" = "--teardown" ]; then
+  "$SCRIPT_DIR/teardown-gcp.sh"
+else
+  echo "VMs still running. Tear down manually:"
+  echo "  $SCRIPT_DIR/teardown-gcp.sh"
+fi
 
 echo "=== Day 4 complete ==="

@@ -1,6 +1,10 @@
 #!/bin/bash
 # startup-script for Elixir/BEAM service node (Cluster C)
-set -euo pipefail
+#
+# Day 2/3 lessons applied:
+#   - set -uo (no -e) — Erlang package install has fallback path
+#   - Uses Docker to run Elixir app (more reliable than bare-metal install)
+set -uo pipefail
 exec > >(tee /var/log/poc-startup.log) 2>&1
 
 ZONE=$(curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/zone | awk -F/ '{print $NF}')
@@ -20,59 +24,59 @@ sysctl -w net.core.netdev_max_backlog=65535
 sysctl -w net.core.rmem_max=16777216
 sysctl -w net.core.wmem_max=16777216
 swapoff -a
+echo "[$(date)] OS tuning done"
 
-# --- Install Erlang/OTP 27 + Elixir 1.17 ---
+# --- Install Docker ---
 apt-get update -qq
-apt-get install -y -qq git curl unzip
-
-# Install Erlang via ASDF or direct package
-curl -fsSL https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc | apt-key add -
-echo "deb https://packages.erlang-solutions.com/ubuntu noble contrib" > /etc/apt/sources.list.d/erlang.list
-apt-get update -qq
-apt-get install -y -qq esl-erlang || {
-  # Fallback: install via ASDF
-  echo "[$(date)] Erlang package failed, trying direct download..."
-  apt-get install -y -qq build-essential autoconf m4 libncurses5-dev libwxgtk3.2-dev libgl1-mesa-dev libglu1-mesa-dev libpng-dev libssh-dev unixodbc-dev xsltproc fop libxml2-utils
-  curl -fsSL https://github.com/erlang/otp/releases/download/OTP-27.2/otp_src_27.2.tar.gz | tar -xz -C /tmp
-  cd /tmp/otp_src_27.2 && ./configure --without-javac && make -j$(nproc) && make install
-  cd /
-}
-
-# Install Elixir
-curl -fsSL https://github.com/elixir-lang/elixir/releases/download/v1.17.3/elixir-otp-27.zip -o /tmp/elixir.zip
-mkdir -p /usr/local/elixir
-unzip -q /tmp/elixir.zip -d /usr/local/elixir
-export PATH=$PATH:/usr/local/elixir/bin
-echo 'export PATH=$PATH:/usr/local/elixir/bin' >> /etc/profile.d/elixir.sh
-echo "[$(date)] Elixir $(elixir --version | tail -1) installed"
+apt-get install -y -qq docker.io docker-compose-v2 git
+systemctl enable docker && systemctl start docker
+echo "[$(date)] Docker ready"
 
 # --- Clone repo ---
 cd /opt
 git clone https://github.com/ffwd-org/stg-seats-poc.git
 cd stg-seats-poc/poc-6-actor-model
 
-# --- Build and start Elixir app ---
-mix local.hex --force
-mix local.rebar --force
-mix deps.get
-MIX_ENV=prod mix compile
-echo "[$(date)] Elixir app compiled"
+# --- Build Docker image (more reliable than bare-metal Erlang install) ---
+echo "[$(date)] Building Elixir Docker image..."
+docker build -t stg-seats-elixir:poc .
+echo "[$(date)] Docker image built"
 
-# Start on port 4000 with tuned BEAM
-ERL_FLAGS="+S 8:8 +P 1000000" MIX_ENV=prod elixir --no-halt -S mix &
-ELIXIR_PID=$!
+# --- Start Elixir app with tuned BEAM ---
+echo "[$(date)] Starting Elixir app..."
+docker run -d --name elixir-poc --network=host \
+  --ulimit nofile=1048576:1048576 \
+  -e ERL_FLAGS="+S 8:8 +P 1000000" \
+  stg-seats-elixir:poc
 sleep 5
 
 # Health check
+echo "[$(date)] Waiting for health check..."
+HEALTHY=""
 for i in $(seq 1 30); do
-  curl -sf http://localhost:4000/health && break
-  sleep 1
+  if curl -sf http://localhost:4000/health > /dev/null 2>&1; then
+    HEALTHY="true"
+    break
+  fi
+  sleep 2
 done
-echo "[$(date)] Elixir app running (PID $ELIXIR_PID) on :4000"
+
+if [ "$HEALTHY" = "true" ]; then
+  echo "[$(date)] Elixir app running on :4000"
+else
+  echo "[$(date)] WARNING: health check failed, checking container..."
+  docker logs elixir-poc 2>&1 | tail -20
+fi
 
 # Signal ready
 gcloud compute instances add-metadata "$INSTANCE" --zone="$ZONE" --metadata=ready=true
 echo "[$(date)] === Elixir service node READY ==="
 
-# Keep alive
-wait $ELIXIR_PID
+# Keep alive — container runs in background
+while true; do
+  if ! docker ps --filter name=elixir-poc --format '{{.Status}}' | grep -q "Up"; then
+    echo "[$(date)] WARNING: Elixir container stopped, restarting..."
+    docker start elixir-poc 2>/dev/null || true
+  fi
+  sleep 30
+done
