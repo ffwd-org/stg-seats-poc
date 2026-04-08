@@ -24,6 +24,7 @@ func NewRedpandaProducer(_ context.Context, brokers []string) (*RedpandaProducer
 	cl, err := kgo.NewClient(
 		kgo.SeedBrokers(brokers...),
 		kgo.DefaultProduceTopic(redpandaTopic),
+		kgo.DisableIdempotentWrite(),
 		kgo.RequiredAcks(kgo.LeaderAck()),
 		kgo.ProducerLinger(5*time.Millisecond),
 	)
