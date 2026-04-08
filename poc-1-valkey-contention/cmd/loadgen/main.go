@@ -335,7 +335,7 @@ func loadScripts() (*loadedScripts, error) {
 }
 
 func getValkeyCPU(ctx context.Context, client valkey.Client) float64 {
-	raw, err := client.Do(ctx, client.B().Arbitrary("INFO", "stats").Build()).ToString()
+	raw, err := client.Do(ctx, client.B().Arbitrary("INFO", "cpu").Build()).ToString()
 	if err != nil {
 		return 0
 	}
