@@ -1,0 +1,762 @@
+[Wed Apr 8 05:47:59 UTC 2026] === SPEC-COMPLIANT RERUN: POC 1 + POC 3 ===
+[Wed Apr 8 05:47:59 UTC 2026] ====== POC 1: HSET ======
+2026/04/08 05:47:59 INFO seeding HSET seats=100000 key=seats:event:1
+2026/04/08 05:47:59 INFO seeded batch from=0 to=500
+2026/04/08 05:47:59 INFO seeded batch from=10000 to=10500
+2026/04/08 05:47:59 INFO seeded batch from=20000 to=20500
+2026/04/08 05:47:59 INFO seeded batch from=30000 to=30500
+2026/04/08 05:47:59 INFO seeded batch from=40000 to=40500
+2026/04/08 05:47:59 INFO seeded batch from=50000 to=50500
+2026/04/08 05:47:59 INFO seeded batch from=60000 to=60500
+2026/04/08 05:47:59 INFO seeded batch from=70000 to=70500
+2026/04/08 05:47:59 INFO seeded batch from=80000 to=80500
+2026/04/08 05:47:59 INFO seeded batch from=90000 to=90500
+2026/04/08 05:47:59 INFO HSET seed complete seats=100000 duration=152.083281ms ops_per_sec=657534
+[Wed Apr 8 05:47:59 UTC 2026] HSET Warmup: 100w/30s
+2026/04/08 05:47:59 INFO metrics server listening addr=:2112
+2026/04/08 05:47:59 INFO starting load test mode=hset seats=100000 stages=[100]
+2026/04/08 05:47:59 INFO starting stage stage=1 of=1 workers=100
+2026/04/08 05:48:04 INFO progress elapsed_s=5 ops=558095 ops_s=111616 errors=0
+2026/04/08 05:48:09 INFO progress elapsed_s=10 ops=1094828 ops_s=109480 errors=0
+2026/04/08 05:48:14 INFO progress elapsed_s=15 ops=1606722 ops_s=107112 errors=0
+2026/04/08 05:48:19 INFO progress elapsed_s=20 ops=2149176 ops_s=107458 errors=0
+2026/04/08 05:48:24 INFO progress elapsed_s=25 ops=2685057 ops_s=107401 errors=0
+2026/04/08 05:48:29 INFO progress elapsed_s=30 ops=3254349 ops_s=108478 errors=39
+2026/04/08 05:48:29 INFO stage result workers=100 total_ops=3254349 ops_per_sec=108478 p50_ms=0.478 p95_ms=0.673 p99_ms=0.737 errors=39 valkey_cpu_pct=91.4
+2026/04/08 05:48:29 INFO all stages complete
+2026/04/08 05:48:29 INFO seeding HSET seats=100000 key=seats:event:1
+2026/04/08 05:48:29 INFO seeded batch from=0 to=500
+2026/04/08 05:48:29 INFO seeded batch from=10000 to=10500
+2026/04/08 05:48:29 INFO seeded batch from=20000 to=20500
+2026/04/08 05:48:29 INFO seeded batch from=30000 to=30500
+2026/04/08 05:48:30 INFO seeded batch from=40000 to=40500
+2026/04/08 05:48:30 INFO seeded batch from=50000 to=50500
+2026/04/08 05:48:30 INFO seeded batch from=60000 to=60500
+2026/04/08 05:48:30 INFO seeded batch from=70000 to=70500
+2026/04/08 05:48:30 INFO seeded batch from=80000 to=80500
+2026/04/08 05:48:30 INFO seeded batch from=90000 to=90500
+2026/04/08 05:48:30 INFO HSET seed complete seats=100000 duration=150.372201ms ops_per_sec=665017
+[Wed Apr 8 05:48:30 UTC 2026] HSET Ramp1: 1000w/60s
+2026/04/08 05:48:30 INFO metrics server listening addr=:2112
+2026/04/08 05:48:30 INFO starting load test mode=hset seats=100000 stages=[1000]
+2026/04/08 05:48:30 INFO starting stage stage=1 of=1 workers=1000
+2026/04/08 05:48:35 INFO progress elapsed_s=5 ops=694199 ops_s=138824 errors=0
+2026/04/08 05:48:40 INFO progress elapsed_s=10 ops=1392011 ops_s=139196 errors=0
+2026/04/08 05:48:45 INFO progress elapsed_s=15 ops=2088347 ops_s=139221 errors=0
+2026/04/08 05:48:50 INFO progress elapsed_s=20 ops=2785754 ops_s=139286 errors=0
+2026/04/08 05:48:55 INFO progress elapsed_s=25 ops=3478691 ops_s=139146 errors=0
+2026/04/08 05:49:00 INFO progress elapsed_s=30 ops=4180463 ops_s=139348 errors=0
+2026/04/08 05:49:05 INFO progress elapsed_s=35 ops=4879600 ops_s=139416 errors=0
+2026/04/08 05:49:10 INFO progress elapsed_s=40 ops=5581980 ops_s=139546 errors=0
+2026/04/08 05:49:15 INFO progress elapsed_s=45 ops=6277372 ops_s=139496 errors=0
+2026/04/08 05:49:20 INFO progress elapsed_s=50 ops=6982844 ops_s=139655 errors=0
+2026/04/08 05:49:25 INFO progress elapsed_s=55 ops=7687379 ops_s=139770 errors=0
+2026/04/08 05:49:30 INFO progress elapsed_s=60 ops=8390604 ops_s=139843 errors=10
+2026/04/08 05:49:30 INFO stage result workers=1000 total_ops=8390841 ops_per_sec=139846 p50_ms=3.896 p95_ms=4.752 p99_ms=5.151 errors=172 valkey_cpu_pct=100.0
+2026/04/08 05:49:30 INFO all stages complete
+2026/04/08 05:49:30 INFO seeding HSET seats=100000 key=seats:event:1
+2026/04/08 05:49:30 INFO seeded batch from=0 to=500
+2026/04/08 05:49:30 INFO seeded batch from=10000 to=10500
+2026/04/08 05:49:30 INFO seeded batch from=20000 to=20500
+2026/04/08 05:49:30 INFO seeded batch from=30000 to=30500
+2026/04/08 05:49:30 INFO seeded batch from=40000 to=40500
+2026/04/08 05:49:30 INFO seeded batch from=50000 to=50500
+2026/04/08 05:49:30 INFO seeded batch from=60000 to=60500
+2026/04/08 05:49:30 INFO seeded batch from=70000 to=70500
+2026/04/08 05:49:30 INFO seeded batch from=80000 to=80500
+2026/04/08 05:49:30 INFO seeded batch from=90000 to=90500
+2026/04/08 05:49:30 INFO HSET seed complete seats=100000 duration=152.04248ms ops_per_sec=657711
+[Wed Apr 8 05:49:30 UTC 2026] HSET Ramp2: 5000w/60s
+2026/04/08 05:49:30 INFO metrics server listening addr=:2112
+2026/04/08 05:49:30 INFO starting load test mode=hset seats=100000 stages=[5000]
+2026/04/08 05:49:30 INFO starting stage stage=1 of=1 workers=5000
+2026/04/08 05:49:35 INFO progress elapsed_s=5 ops=804374 ops_s=160873 errors=0
+2026/04/08 05:49:40 INFO progress elapsed_s=10 ops=1591889 ops_s=159186 errors=0
+2026/04/08 05:49:45 INFO progress elapsed_s=15 ops=2306975 ops_s=153791 errors=0
+2026/04/08 05:49:50 INFO progress elapsed_s=20 ops=3032406 ops_s=151618 errors=0
+2026/04/08 05:49:55 INFO progress elapsed_s=25 ops=3760246 ops_s=150409 errors=0
+2026/04/08 05:50:00 INFO progress elapsed_s=30 ops=4566309 ops_s=152210 errors=0
+2026/04/08 05:50:05 INFO progress elapsed_s=35 ops=5367242 ops_s=153349 errors=0
+2026/04/08 05:50:10 INFO progress elapsed_s=40 ops=6173238 ops_s=154331 errors=0
+2026/04/08 05:50:15 INFO progress elapsed_s=45 ops=6972715 ops_s=154949 errors=0
+2026/04/08 05:50:20 INFO progress elapsed_s=50 ops=7782475 ops_s=155649 errors=0
+2026/04/08 05:50:25 INFO progress elapsed_s=55 ops=8591554 ops_s=156207 errors=0
+2026/04/08 05:50:30 INFO progress elapsed_s=60 ops=9343580 ops_s=155723 errors=12
+2026/04/08 05:50:30 INFO stage result workers=5000 total_ops=9343580 ops_per_sec=155698 p50_ms=13.780 p95_ms=29.405 p99_ms=40.292 errors=2481 valkey_cpu_pct=100.0
+2026/04/08 05:50:30 INFO all stages complete
+2026/04/08 05:50:30 INFO seeding HSET seats=100000 key=seats:event:1
+2026/04/08 05:50:30 INFO seeded batch from=0 to=500
+2026/04/08 05:50:30 INFO seeded batch from=10000 to=10500
+2026/04/08 05:50:30 INFO seeded batch from=20000 to=20500
+2026/04/08 05:50:30 INFO seeded batch from=30000 to=30500
+2026/04/08 05:50:30 INFO seeded batch from=40000 to=40500
+2026/04/08 05:50:30 INFO seeded batch from=50000 to=50500
+2026/04/08 05:50:30 INFO seeded batch from=60000 to=60500
+2026/04/08 05:50:30 INFO seeded batch from=70000 to=70500
+2026/04/08 05:50:30 INFO seeded batch from=80000 to=80500
+2026/04/08 05:50:30 INFO seeded batch from=90000 to=90500
+2026/04/08 05:50:30 INFO HSET seed complete seats=100000 duration=146.734918ms ops_per_sec=681501
+[Wed Apr 8 05:50:30 UTC 2026] HSET Ramp3: 10000w/120s
+2026/04/08 05:50:30 INFO metrics server listening addr=:2112
+2026/04/08 05:50:30 INFO starting load test mode=hset seats=100000 stages=[10000]
+2026/04/08 05:50:30 INFO starting stage stage=1 of=1 workers=10000
+2026/04/08 05:50:35 INFO progress elapsed_s=5 ops=790306 ops_s=158059 errors=0
+2026/04/08 05:50:40 INFO progress elapsed_s=10 ops=1581822 ops_s=158181 errors=0
+2026/04/08 05:50:45 INFO progress elapsed_s=15 ops=2373413 ops_s=158225 errors=0
+2026/04/08 05:50:50 INFO progress elapsed_s=20 ops=3155387 ops_s=157762 errors=0
+2026/04/08 05:50:55 INFO progress elapsed_s=25 ops=3944016 ops_s=157760 errors=0
+2026/04/08 05:51:00 INFO progress elapsed_s=30 ops=4732480 ops_s=157747 errors=0
+2026/04/08 05:51:05 INFO progress elapsed_s=35 ops=5493291 ops_s=156949 errors=0
+2026/04/08 05:51:10 INFO progress elapsed_s=40 ops=6287013 ops_s=157175 errors=0
+2026/04/08 05:51:15 INFO progress elapsed_s=45 ops=7073026 ops_s=157178 errors=0
+2026/04/08 05:51:20 INFO progress elapsed_s=50 ops=7868779 ops_s=157375 errors=0
+2026/04/08 05:51:25 INFO progress elapsed_s=55 ops=8663694 ops_s=157522 errors=0
+2026/04/08 05:51:30 INFO progress elapsed_s=60 ops=9458390 ops_s=157640 errors=0
+2026/04/08 05:51:35 INFO progress elapsed_s=65 ops=10254924 ops_s=157766 errors=0
+2026/04/08 05:51:40 INFO progress elapsed_s=70 ops=11048840 ops_s=157839 errors=0
+2026/04/08 05:51:45 INFO progress elapsed_s=75 ops=11845240 ops_s=157936 errors=0
+2026/04/08 05:51:50 INFO progress elapsed_s=80 ops=12639408 ops_s=157992 errors=0
+2026/04/08 05:51:55 INFO progress elapsed_s=85 ops=13421578 ops_s=157901 errors=0
+2026/04/08 05:52:00 INFO progress elapsed_s=90 ops=14215974 ops_s=157955 errors=0
+2026/04/08 05:52:05 INFO progress elapsed_s=95 ops=15009248 ops_s=157992 errors=0
+2026/04/08 05:52:10 INFO progress elapsed_s=100 ops=15804553 ops_s=158045 errors=0
+2026/04/08 05:52:15 INFO progress elapsed_s=105 ops=16597537 ops_s=158072 errors=0
+2026/04/08 05:52:20 INFO progress elapsed_s=110 ops=17394578 ops_s=158132 errors=0
+2026/04/08 05:52:25 INFO progress elapsed_s=115 ops=18182633 ops_s=158110 errors=0
+2026/04/08 05:52:30 INFO progress elapsed_s=120 ops=18979115 ops_s=158159 errors=0
+2026/04/08 05:52:31 INFO stage result workers=10000 total_ops=18979191 ops_per_sec=158126 p50_ms=31.448 p95_ms=54.744 p99_ms=88.120 errors=4990 valkey_cpu_pct=100.0
+2026/04/08 05:52:31 INFO all stages complete
+2026/04/08 05:52:31 INFO seeding HSET seats=100000 key=seats:event:1
+2026/04/08 05:52:31 INFO seeded batch from=0 to=500
+2026/04/08 05:52:31 INFO seeded batch from=10000 to=10500
+2026/04/08 05:52:31 INFO seeded batch from=20000 to=20500
+2026/04/08 05:52:31 INFO seeded batch from=30000 to=30500
+2026/04/08 05:52:31 INFO seeded batch from=40000 to=40500
+2026/04/08 05:52:31 INFO seeded batch from=50000 to=50500
+2026/04/08 05:52:31 INFO seeded batch from=60000 to=60500
+2026/04/08 05:52:31 INFO seeded batch from=70000 to=70500
+2026/04/08 05:52:31 INFO seeded batch from=80000 to=80500
+2026/04/08 05:52:31 INFO seeded batch from=90000 to=90500
+2026/04/08 05:52:31 INFO HSET seed complete seats=100000 duration=144.852296ms ops_per_sec=690358
+[Wed Apr 8 05:52:31 UTC 2026] HSET Ramp4: 25000w/120s
+2026/04/08 05:52:31 INFO metrics server listening addr=:2112
+2026/04/08 05:52:31 INFO starting load test mode=hset seats=100000 stages=[25000]
+2026/04/08 05:52:31 INFO starting stage stage=1 of=1 workers=25000
+2026/04/08 05:52:36 INFO progress elapsed_s=5 ops=683708 ops_s=136736 errors=0
+2026/04/08 05:52:41 INFO progress elapsed_s=10 ops=1391373 ops_s=139134 errors=0
+2026/04/08 05:52:46 INFO progress elapsed_s=15 ops=2142780 ops_s=142850 errors=0
+2026/04/08 05:52:51 INFO progress elapsed_s=20 ops=2889831 ops_s=144486 errors=0
+2026/04/08 05:52:56 INFO progress elapsed_s=25 ops=3629834 ops_s=145191 errors=0
+2026/04/08 05:53:01 INFO progress elapsed_s=30 ops=4382792 ops_s=146089 errors=0
+2026/04/08 05:53:06 INFO progress elapsed_s=35 ops=5131044 ops_s=146600 errors=0
+2026/04/08 05:53:11 INFO progress elapsed_s=40 ops=5880209 ops_s=147003 errors=0
+2026/04/08 05:53:16 INFO progress elapsed_s=45 ops=6623661 ops_s=147192 errors=0
+2026/04/08 05:53:21 INFO progress elapsed_s=50 ops=7372304 ops_s=147446 errors=0
+2026/04/08 05:53:26 INFO progress elapsed_s=55 ops=8117452 ops_s=147590 errors=0
+2026/04/08 05:53:31 INFO progress elapsed_s=60 ops=8864189 ops_s=147735 errors=0
+2026/04/08 05:53:36 INFO progress elapsed_s=65 ops=9615317 ops_s=147927 errors=0
+2026/04/08 05:53:41 INFO progress elapsed_s=70 ops=10367765 ops_s=148111 errors=0
+2026/04/08 05:53:46 INFO progress elapsed_s=75 ops=11119833 ops_s=148264 errors=0
+2026/04/08 05:53:51 INFO progress elapsed_s=80 ops=11871537 ops_s=148394 errors=0
+2026/04/08 05:53:56 INFO progress elapsed_s=85 ops=12618826 ops_s=148456 errors=0
+2026/04/08 05:54:01 INFO progress elapsed_s=90 ops=13369535 ops_s=148550 errors=0
+2026/04/08 05:54:06 INFO progress elapsed_s=95 ops=14116388 ops_s=148593 errors=0
+2026/04/08 05:54:11 INFO progress elapsed_s=100 ops=14862463 ops_s=148624 errors=0
+2026/04/08 05:54:16 INFO progress elapsed_s=105 ops=15601159 ops_s=148582 errors=0
+2026/04/08 05:54:21 INFO progress elapsed_s=110 ops=16350624 ops_s=148642 errors=0
+2026/04/08 05:54:26 INFO progress elapsed_s=115 ops=17096527 ops_s=148665 errors=0
+2026/04/08 05:54:31 INFO progress elapsed_s=120 ops=17849430 ops_s=148745 errors=0
+2026/04/08 05:54:31 INFO stage result workers=25000 total_ops=17849430 ops_per_sec=148657 p50_ms=86.345 p95_ms=103.695 p99_ms=183.802 errors=13222 valkey_cpu_pct=99.8
+2026/04/08 05:54:31 INFO all stages complete
+2026/04/08 05:54:31 INFO seeding HSET seats=100000 key=seats:event:1
+2026/04/08 05:54:31 INFO seeded batch from=0 to=500
+2026/04/08 05:54:31 INFO seeded batch from=10000 to=10500
+2026/04/08 05:54:31 INFO seeded batch from=20000 to=20500
+2026/04/08 05:54:31 INFO seeded batch from=30000 to=30500
+2026/04/08 05:54:31 INFO seeded batch from=40000 to=40500
+2026/04/08 05:54:31 INFO seeded batch from=50000 to=50500
+2026/04/08 05:54:31 INFO seeded batch from=60000 to=60500
+2026/04/08 05:54:31 INFO seeded batch from=70000 to=70500
+2026/04/08 05:54:31 INFO seeded batch from=80000 to=80500
+2026/04/08 05:54:31 INFO seeded batch from=90000 to=90500
+2026/04/08 05:54:31 INFO HSET seed complete seats=100000 duration=143.070854ms ops_per_sec=698954
+[Wed Apr 8 05:54:31 UTC 2026] HSET Ramp5: 50000w/120s
+2026/04/08 05:54:31 INFO metrics server listening addr=:2112
+2026/04/08 05:54:31 INFO starting load test mode=hset seats=100000 stages=[50000]
+2026/04/08 05:54:31 INFO starting stage stage=1 of=1 workers=50000
+2026/04/08 05:54:36 INFO progress elapsed_s=5 ops=668190 ops_s=133615 errors=0
+2026/04/08 05:54:41 INFO progress elapsed_s=10 ops=1348401 ops_s=134839 errors=0
+2026/04/08 05:54:46 INFO progress elapsed_s=15 ops=2026543 ops_s=135096 errors=0
+2026/04/08 05:54:51 INFO progress elapsed_s=20 ops=2709132 ops_s=135456 errors=0
+2026/04/08 05:54:56 INFO progress elapsed_s=25 ops=3383279 ops_s=135331 errors=0
+2026/04/08 05:55:01 INFO progress elapsed_s=30 ops=4062866 ops_s=135429 errors=0
+2026/04/08 05:55:06 INFO progress elapsed_s=35 ops=4738253 ops_s=135378 errors=0
+2026/04/08 05:55:11 INFO progress elapsed_s=40 ops=5417595 ops_s=135440 errors=0
+2026/04/08 05:55:16 INFO progress elapsed_s=45 ops=6089310 ops_s=135315 errors=0
+2026/04/08 05:55:21 INFO progress elapsed_s=50 ops=6771831 ops_s=135435 errors=0
+2026/04/08 05:55:26 INFO progress elapsed_s=55 ops=7447684 ops_s=135412 errors=0
+2026/04/08 05:55:31 INFO progress elapsed_s=60 ops=8123130 ops_s=135385 errors=0
+2026/04/08 05:55:36 INFO progress elapsed_s=65 ops=8786223 ops_s=135172 errors=0
+2026/04/08 05:55:41 INFO progress elapsed_s=70 ops=9463868 ops_s=135198 errors=0
+2026/04/08 05:55:46 INFO progress elapsed_s=75 ops=10145876 ops_s=135278 errors=0
+2026/04/08 05:55:51 INFO progress elapsed_s=80 ops=10821467 ops_s=135268 errors=0
+2026/04/08 05:55:56 INFO progress elapsed_s=85 ops=11490877 ops_s=135186 errors=0
+2026/04/08 05:56:01 INFO progress elapsed_s=90 ops=12171720 ops_s=135241 errors=0
+2026/04/08 05:56:06 INFO progress elapsed_s=95 ops=12849510 ops_s=135258 errors=0
+2026/04/08 05:56:11 INFO progress elapsed_s=100 ops=13529318 ops_s=135293 errors=0
+2026/04/08 05:56:16 INFO progress elapsed_s=105 ops=14204849 ops_s=135284 errors=0
+2026/04/08 05:56:21 INFO progress elapsed_s=110 ops=14879266 ops_s=135265 errors=0
+2026/04/08 05:56:26 INFO progress elapsed_s=115 ops=15553547 ops_s=135248 errors=0
+2026/04/08 05:56:31 INFO progress elapsed_s=120 ops=16227267 ops_s=135225 errors=10
+2026/04/08 05:56:32 INFO stage result workers=50000 total_ops=16227267 ops_per_sec=135056 p50_ms=161.643 p95_ms=276.081 p99_ms=410.975 errors=27931 valkey_cpu_pct=99.6
+2026/04/08 05:56:32 INFO all stages complete
+2026/04/08 05:56:32 INFO seeding HSET seats=100000 key=seats:event:1
+2026/04/08 05:56:32 INFO seeded batch from=0 to=500
+2026/04/08 05:56:32 INFO seeded batch from=10000 to=10500
+2026/04/08 05:56:32 INFO seeded batch from=20000 to=20500
+2026/04/08 05:56:32 INFO seeded batch from=30000 to=30500
+2026/04/08 05:56:32 INFO seeded batch from=40000 to=40500
+2026/04/08 05:56:32 INFO seeded batch from=50000 to=50500
+2026/04/08 05:56:32 INFO seeded batch from=60000 to=60500
+2026/04/08 05:56:32 INFO seeded batch from=70000 to=70500
+2026/04/08 05:56:32 INFO seeded batch from=80000 to=80500
+2026/04/08 05:56:32 INFO seeded batch from=90000 to=90500
+2026/04/08 05:56:32 INFO HSET seed complete seats=100000 duration=143.661231ms ops_per_sec=696082
+[Wed Apr 8 05:56:32 UTC 2026] HSET Ramp6: 100000w/120s
+2026/04/08 05:56:32 INFO metrics server listening addr=:2112
+2026/04/08 05:56:32 INFO starting load test mode=hset seats=100000 stages=[100000]
+2026/04/08 05:56:32 INFO starting stage stage=1 of=1 workers=100000
+2026/04/08 05:56:37 INFO progress elapsed_s=5 ops=511591 ops_s=102312 errors=0
+2026/04/08 05:56:42 INFO progress elapsed_s=10 ops=1030459 ops_s=103043 errors=0
+2026/04/08 05:56:47 INFO progress elapsed_s=15 ops=1537567 ops_s=102502 errors=0
+2026/04/08 05:56:52 INFO progress elapsed_s=20 ops=2052339 ops_s=102613 errors=0
+2026/04/08 05:56:57 INFO progress elapsed_s=25 ops=2557763 ops_s=102309 errors=0
+2026/04/08 05:57:02 INFO progress elapsed_s=30 ops=3105018 ops_s=103499 errors=0
+2026/04/08 05:57:07 INFO progress elapsed_s=35 ops=3667701 ops_s=104791 errors=0
+2026/04/08 05:57:12 INFO progress elapsed_s=40 ops=4228307 ops_s=105707 errors=0
+2026/04/08 05:57:17 INFO progress elapsed_s=45 ops=4782387 ops_s=106273 errors=0
+2026/04/08 05:57:22 INFO progress elapsed_s=50 ops=5335822 ops_s=106716 errors=0
+2026/04/08 05:57:27 INFO progress elapsed_s=55 ops=5896896 ops_s=107216 errors=0
+2026/04/08 05:57:32 INFO progress elapsed_s=60 ops=6465387 ops_s=107755 errors=0
+2026/04/08 05:57:37 INFO progress elapsed_s=65 ops=7045135 ops_s=108385 errors=0
+2026/04/08 05:57:42 INFO progress elapsed_s=70 ops=7539458 ops_s=107706 errors=0
+2026/04/08 05:57:47 INFO progress elapsed_s=75 ops=8036340 ops_s=107150 errors=0
+2026/04/08 05:57:52 INFO progress elapsed_s=80 ops=8531926 ops_s=106649 errors=0
+2026/04/08 05:57:57 INFO progress elapsed_s=85 ops=9017245 ops_s=106085 errors=0
+2026/04/08 05:58:02 INFO progress elapsed_s=90 ops=9509678 ops_s=105662 errors=0
+2026/04/08 05:58:07 INFO progress elapsed_s=95 ops=10003991 ops_s=105305 errors=0
+2026/04/08 05:58:12 INFO progress elapsed_s=100 ops=10495909 ops_s=104959 errors=0
+2026/04/08 05:58:17 INFO progress elapsed_s=105 ops=10983469 ops_s=104604 errors=0
+2026/04/08 05:58:22 INFO progress elapsed_s=110 ops=11478674 ops_s=104351 errors=0
+2026/04/08 05:58:27 INFO progress elapsed_s=115 ops=11999579 ops_s=104344 errors=0
+2026/04/08 05:58:32 INFO progress elapsed_s=120 ops=12588929 ops_s=104907 errors=0
+2026/04/08 05:58:33 INFO stage result workers=100000 total_ops=12589079 ops_per_sec=104635 p50_ms=359.238 p95_ms=726.996 p99_ms=813.982 errors=61410 valkey_cpu_pct=99.5
+2026/04/08 05:58:33 INFO all stages complete
+[Wed Apr 8 05:58:33 UTC 2026] ====== POC 1: BITFIELD ======
+2026/04/08 05:58:33 INFO seeding BITFIELD seats=100000 key=seats:event:1:bits
+2026/04/08 05:58:33 INFO BITFIELD seed complete seats=100000 bits_key_bytes=25000 duration=1.57117ms
+[Wed Apr 8 05:58:33 UTC 2026] BITFIELD Warmup: 100w/30s
+2026/04/08 05:58:33 INFO metrics server listening addr=:2112
+2026/04/08 05:58:33 INFO starting load test mode=bitfield seats=100000 stages=[100]
+2026/04/08 05:58:33 INFO starting stage stage=1 of=1 workers=100
+2026/04/08 05:58:38 INFO progress elapsed_s=5 ops=637867 ops_s=127569 errors=0
+2026/04/08 05:58:43 INFO progress elapsed_s=10 ops=1294761 ops_s=129473 errors=0
+2026/04/08 05:58:48 INFO progress elapsed_s=15 ops=1967601 ops_s=131172 errors=0
+2026/04/08 05:58:53 INFO progress elapsed_s=20 ops=2632566 ops_s=131627 errors=0
+2026/04/08 05:58:58 INFO progress elapsed_s=25 ops=3279244 ops_s=131169 errors=0
+2026/04/08 05:59:03 INFO stage result workers=100 total_ops=3928182 ops_per_sec=130939 p50_ms=0.377 p95_ms=0.561 p99_ms=0.658 errors=21 valkey_cpu_pct=95.9
+2026/04/08 05:59:03 INFO all stages complete
+2026/04/08 05:59:03 INFO seeding BITFIELD seats=100000 key=seats:event:1:bits
+2026/04/08 05:59:03 INFO BITFIELD seed complete seats=100000 bits_key_bytes=25000 duration=1.715373ms
+[Wed Apr 8 05:59:03 UTC 2026] BITFIELD Ramp1: 1000w/60s
+2026/04/08 05:59:03 INFO metrics server listening addr=:2112
+2026/04/08 05:59:03 INFO starting load test mode=bitfield seats=100000 stages=[1000]
+2026/04/08 05:59:03 INFO starting stage stage=1 of=1 workers=1000
+2026/04/08 05:59:08 INFO progress elapsed_s=5 ops=864075 ops_s=172810 errors=0
+2026/04/08 05:59:13 INFO progress elapsed_s=10 ops=1720865 ops_s=172069 errors=0
+2026/04/08 05:59:18 INFO progress elapsed_s=15 ops=2587567 ops_s=172501 errors=0
+2026/04/08 05:59:23 INFO progress elapsed_s=20 ops=3452644 ops_s=172631 errors=0
+2026/04/08 05:59:28 INFO progress elapsed_s=25 ops=4319557 ops_s=172780 errors=0
+2026/04/08 05:59:33 INFO progress elapsed_s=30 ops=5184125 ops_s=172803 errors=0
+2026/04/08 05:59:38 INFO progress elapsed_s=35 ops=6049833 ops_s=172852 errors=0
+2026/04/08 05:59:43 INFO progress elapsed_s=40 ops=6896214 ops_s=172404 errors=0
+2026/04/08 05:59:48 INFO progress elapsed_s=45 ops=7763453 ops_s=172521 errors=0
+2026/04/08 05:59:53 INFO progress elapsed_s=50 ops=8597553 ops_s=171951 errors=0
+2026/04/08 05:59:58 INFO progress elapsed_s=55 ops=9411986 ops_s=171124 errors=0
+2026/04/08 06:00:03 INFO progress elapsed_s=60 ops=10229956 ops_s=170499 errors=2
+2026/04/08 06:00:03 INFO stage result workers=1000 total_ops=10230231 ops_per_sec=170502 p50_ms=3.122 p95_ms=3.842 p99_ms=4.136 errors=185 valkey_cpu_pct=100.0
+2026/04/08 06:00:03 INFO all stages complete
+2026/04/08 06:00:03 INFO seeding BITFIELD seats=100000 key=seats:event:1:bits
+2026/04/08 06:00:03 INFO BITFIELD seed complete seats=100000 bits_key_bytes=25000 duration=1.451011ms
+[Wed Apr 8 06:00:03 UTC 2026] BITFIELD Ramp2: 5000w/60s
+2026/04/08 06:00:03 INFO metrics server listening addr=:2112
+2026/04/08 06:00:03 INFO starting load test mode=bitfield seats=100000 stages=[5000]
+2026/04/08 06:00:03 INFO starting stage stage=1 of=1 workers=5000
+2026/04/08 06:00:08 INFO progress elapsed_s=5 ops=795432 ops_s=159057 errors=0
+2026/04/08 06:00:13 INFO progress elapsed_s=10 ops=1602726 ops_s=160269 errors=0
+2026/04/08 06:00:18 INFO progress elapsed_s=15 ops=2408683 ops_s=160577 errors=0
+2026/04/08 06:00:23 INFO progress elapsed_s=20 ops=3216031 ops_s=160796 errors=0
+2026/04/08 06:00:28 INFO progress elapsed_s=25 ops=4025026 ops_s=161000 errors=0
+2026/04/08 06:00:33 INFO progress elapsed_s=30 ops=4792576 ops_s=159751 errors=0
+2026/04/08 06:00:38 INFO progress elapsed_s=35 ops=5603386 ops_s=160096 errors=0
+2026/04/08 06:00:43 INFO progress elapsed_s=40 ops=6414883 ops_s=160371 errors=0
+2026/04/08 06:00:48 INFO progress elapsed_s=45 ops=7233484 ops_s=160743 errors=0
+2026/04/08 06:00:53 INFO progress elapsed_s=50 ops=8026736 ops_s=160534 errors=0
+2026/04/08 06:00:58 INFO progress elapsed_s=55 ops=8745959 ops_s=159016 errors=0
+2026/04/08 06:01:03 INFO progress elapsed_s=60 ops=9558064 ops_s=159299 errors=0
+2026/04/08 06:01:03 INFO stage result workers=5000 total_ops=9558311 ops_per_sec=159290 p50_ms=17.050 p95_ms=22.238 p99_ms=26.208 errors=2234 valkey_cpu_pct=100.0
+2026/04/08 06:01:03 INFO all stages complete
+2026/04/08 06:01:03 INFO seeding BITFIELD seats=100000 key=seats:event:1:bits
+2026/04/08 06:01:03 INFO BITFIELD seed complete seats=100000 bits_key_bytes=25000 duration=1.39982ms
+[Wed Apr 8 06:01:03 UTC 2026] BITFIELD Ramp3: 10000w/120s
+2026/04/08 06:01:03 INFO metrics server listening addr=:2112
+2026/04/08 06:01:03 INFO starting load test mode=bitfield seats=100000 stages=[10000]
+2026/04/08 06:01:03 INFO starting stage stage=1 of=1 workers=10000
+2026/04/08 06:01:08 INFO progress elapsed_s=5 ops=723027 ops_s=144600 errors=0
+2026/04/08 06:01:13 INFO progress elapsed_s=10 ops=1436763 ops_s=143660 errors=0
+2026/04/08 06:01:18 INFO progress elapsed_s=15 ops=2224331 ops_s=148279 errors=0
+2026/04/08 06:01:23 INFO progress elapsed_s=20 ops=2996223 ops_s=149810 errors=0
+2026/04/08 06:01:28 INFO progress elapsed_s=25 ops=3799435 ops_s=151976 errors=0
+2026/04/08 06:01:33 INFO progress elapsed_s=30 ops=4595933 ops_s=153197 errors=0
+2026/04/08 06:01:38 INFO progress elapsed_s=35 ops=5397852 ops_s=154224 errors=0
+2026/04/08 06:01:43 INFO progress elapsed_s=40 ops=6199042 ops_s=154976 errors=0
+2026/04/08 06:01:48 INFO progress elapsed_s=45 ops=7003395 ops_s=155631 errors=0
+2026/04/08 06:01:53 INFO progress elapsed_s=50 ops=7804130 ops_s=156082 errors=0
+2026/04/08 06:01:58 INFO progress elapsed_s=55 ops=8602454 ops_s=156408 errors=0
+2026/04/08 06:02:03 INFO progress elapsed_s=60 ops=9404213 ops_s=156736 errors=0
+2026/04/08 06:02:08 INFO progress elapsed_s=65 ops=10210023 ops_s=157077 errors=0
+2026/04/08 06:02:13 INFO progress elapsed_s=70 ops=11006136 ops_s=157230 errors=0
+2026/04/08 06:02:18 INFO progress elapsed_s=75 ops=11809314 ops_s=157457 errors=0
+2026/04/08 06:02:23 INFO progress elapsed_s=80 ops=12612060 ops_s=157651 errors=0
+2026/04/08 06:02:28 INFO progress elapsed_s=85 ops=13417301 ops_s=157850 errors=0
+2026/04/08 06:02:33 INFO progress elapsed_s=90 ops=14215657 ops_s=157951 errors=0
+2026/04/08 06:02:38 INFO progress elapsed_s=95 ops=15019722 ops_s=158102 errors=0
+2026/04/08 06:02:43 INFO progress elapsed_s=100 ops=15824154 ops_s=158241 errors=0
+2026/04/08 06:02:48 INFO progress elapsed_s=105 ops=16626820 ops_s=158350 errors=0
+2026/04/08 06:02:53 INFO progress elapsed_s=110 ops=17424461 ops_s=158403 errors=0
+2026/04/08 06:02:58 INFO progress elapsed_s=115 ops=18214683 ops_s=158388 errors=0
+2026/04/08 06:03:03 INFO progress elapsed_s=120 ops=19015217 ops_s=158460 errors=0
+2026/04/08 06:03:04 INFO stage result workers=10000 total_ops=19015278 ops_per_sec=158427 p50_ms=30.855 p95_ms=54.852 p99_ms=95.591 errors=4907 valkey_cpu_pct=100.0
+2026/04/08 06:03:04 INFO all stages complete
+2026/04/08 06:03:04 INFO seeding BITFIELD seats=100000 key=seats:event:1:bits
+2026/04/08 06:03:04 INFO BITFIELD seed complete seats=100000 bits_key_bytes=25000 duration=1.250245ms
+[Wed Apr 8 06:03:04 UTC 2026] BITFIELD Ramp4: 25000w/120s
+2026/04/08 06:03:04 INFO metrics server listening addr=:2112
+2026/04/08 06:03:04 INFO starting load test mode=bitfield seats=100000 stages=[25000]
+2026/04/08 06:03:04 INFO starting stage stage=1 of=1 workers=25000
+2026/04/08 06:03:09 INFO progress elapsed_s=5 ops=728143 ops_s=145623 errors=0
+2026/04/08 06:03:14 INFO progress elapsed_s=10 ops=1464782 ops_s=146461 errors=0
+2026/04/08 06:03:19 INFO progress elapsed_s=15 ops=2205021 ops_s=146996 errors=0
+2026/04/08 06:03:24 INFO progress elapsed_s=20 ops=2938021 ops_s=146899 errors=0
+2026/04/08 06:03:29 INFO progress elapsed_s=25 ops=3673481 ops_s=146934 errors=0
+2026/04/08 06:03:34 INFO progress elapsed_s=30 ops=4415917 ops_s=147196 errors=0
+2026/04/08 06:03:39 INFO progress elapsed_s=35 ops=5182710 ops_s=148076 errors=0
+2026/04/08 06:03:44 INFO progress elapsed_s=40 ops=5978916 ops_s=149472 errors=0
+2026/04/08 06:03:49 INFO progress elapsed_s=45 ops=6778806 ops_s=150640 errors=0
+2026/04/08 06:03:54 INFO progress elapsed_s=50 ops=7570193 ops_s=151402 errors=0
+2026/04/08 06:03:59 INFO progress elapsed_s=55 ops=8362273 ops_s=152040 errors=0
+2026/04/08 06:04:04 INFO progress elapsed_s=60 ops=9157550 ops_s=152624 errors=0
+2026/04/08 06:04:09 INFO progress elapsed_s=65 ops=9956184 ops_s=153172 errors=0
+2026/04/08 06:04:14 INFO progress elapsed_s=70 ops=10743442 ops_s=153477 errors=0
+2026/04/08 06:04:19 INFO progress elapsed_s=75 ops=11536557 ops_s=153820 errors=0
+2026/04/08 06:04:24 INFO progress elapsed_s=80 ops=12331470 ops_s=154143 errors=0
+2026/04/08 06:04:29 INFO progress elapsed_s=85 ops=13117823 ops_s=154325 errors=0
+2026/04/08 06:04:34 INFO progress elapsed_s=90 ops=13915151 ops_s=154612 errors=0
+2026/04/08 06:04:39 INFO progress elapsed_s=95 ops=14713671 ops_s=154880 errors=0
+2026/04/08 06:04:44 INFO progress elapsed_s=100 ops=15511476 ops_s=155114 errors=0
+2026/04/08 06:04:49 INFO progress elapsed_s=105 ops=16311319 ops_s=155346 errors=0
+2026/04/08 06:04:54 INFO progress elapsed_s=110 ops=17104602 ops_s=155496 errors=0
+2026/04/08 06:04:59 INFO progress elapsed_s=115 ops=17898139 ops_s=155636 errors=0
+2026/04/08 06:05:04 INFO progress elapsed_s=120 ops=18694881 ops_s=155790 errors=0
+2026/04/08 06:05:04 INFO stage result workers=25000 total_ops=18695153 ops_per_sec=155703 p50_ms=83.336 p95_ms=115.179 p99_ms=195.490 errors=13054 valkey_cpu_pct=99.7
+2026/04/08 06:05:04 INFO all stages complete
+2026/04/08 06:05:04 INFO seeding BITFIELD seats=100000 key=seats:event:1:bits
+2026/04/08 06:05:04 INFO BITFIELD seed complete seats=100000 bits_key_bytes=25000 duration=1.186966ms
+[Wed Apr 8 06:05:04 UTC 2026] BITFIELD Ramp5: 50000w/120s
+2026/04/08 06:05:04 INFO metrics server listening addr=:2112
+2026/04/08 06:05:04 INFO starting load test mode=bitfield seats=100000 stages=[50000]
+2026/04/08 06:05:04 INFO starting stage stage=1 of=1 workers=50000
+2026/04/08 06:05:09 INFO progress elapsed_s=5 ops=704765 ops_s=140934 errors=0
+2026/04/08 06:05:14 INFO progress elapsed_s=10 ops=1434145 ops_s=143403 errors=0
+2026/04/08 06:05:19 INFO progress elapsed_s=15 ops=2164593 ops_s=144305 errors=0
+2026/04/08 06:05:24 INFO progress elapsed_s=20 ops=2895283 ops_s=144758 errors=0
+2026/04/08 06:05:29 INFO progress elapsed_s=25 ops=3612004 ops_s=144478 errors=0
+2026/04/08 06:05:34 INFO progress elapsed_s=30 ops=4331707 ops_s=144389 errors=0
+2026/04/08 06:05:39 INFO progress elapsed_s=35 ops=5056029 ops_s=144457 errors=0
+2026/04/08 06:05:44 INFO progress elapsed_s=40 ops=5773978 ops_s=144349 errors=0
+2026/04/08 06:05:49 INFO progress elapsed_s=45 ops=6498998 ops_s=144421 errors=0
+2026/04/08 06:05:54 INFO progress elapsed_s=50 ops=7221821 ops_s=144436 errors=0
+2026/04/08 06:05:59 INFO progress elapsed_s=55 ops=7941475 ops_s=144388 errors=0
+2026/04/08 06:06:04 INFO progress elapsed_s=60 ops=8665916 ops_s=144431 errors=0
+2026/04/08 06:06:09 INFO progress elapsed_s=65 ops=9383497 ops_s=144361 errors=0
+2026/04/08 06:06:14 INFO progress elapsed_s=70 ops=10109680 ops_s=144423 errors=0
+2026/04/08 06:06:19 INFO progress elapsed_s=75 ops=10840537 ops_s=144538 errors=0
+2026/04/08 06:06:24 INFO progress elapsed_s=80 ops=11571958 ops_s=144649 errors=0
+2026/04/08 06:06:29 INFO progress elapsed_s=85 ops=12305128 ops_s=144766 errors=0
+2026/04/08 06:06:34 INFO progress elapsed_s=90 ops=13034387 ops_s=144826 errors=0
+2026/04/08 06:06:39 INFO progress elapsed_s=95 ops=13772211 ops_s=144970 errors=0
+2026/04/08 06:06:44 INFO progress elapsed_s=100 ops=14504629 ops_s=145045 errors=0
+2026/04/08 06:06:49 INFO progress elapsed_s=105 ops=15241920 ops_s=145161 errors=0
+2026/04/08 06:06:54 INFO progress elapsed_s=110 ops=15967222 ops_s=145156 errors=0
+2026/04/08 06:06:59 INFO progress elapsed_s=115 ops=16698284 ops_s=145202 errors=0
+2026/04/08 06:07:04 INFO progress elapsed_s=120 ops=17433370 ops_s=145278 errors=0
+2026/04/08 06:07:04 INFO stage result workers=50000 total_ops=17433524 ops_per_sec=145104 p50_ms=149.028 p95_ms=178.001 p99_ms=282.859 errors=28008 valkey_cpu_pct=99.6
+2026/04/08 06:07:04 INFO all stages complete
+2026/04/08 06:07:04 INFO seeding BITFIELD seats=100000 key=seats:event:1:bits
+2026/04/08 06:07:04 INFO BITFIELD seed complete seats=100000 bits_key_bytes=25000 duration=1.54153ms
+[Wed Apr 8 06:07:04 UTC 2026] BITFIELD Ramp6: 100000w/120s
+2026/04/08 06:07:04 INFO metrics server listening addr=:2112
+2026/04/08 06:07:04 INFO starting load test mode=bitfield seats=100000 stages=[100000]
+2026/04/08 06:07:04 INFO starting stage stage=1 of=1 workers=100000
+2026/04/08 06:07:09 INFO progress elapsed_s=5 ops=596950 ops_s=119354 errors=0
+2026/04/08 06:07:14 INFO progress elapsed_s=10 ops=1208010 ops_s=120796 errors=0
+2026/04/08 06:07:19 INFO progress elapsed_s=15 ops=1831254 ops_s=122081 errors=0
+2026/04/08 06:07:24 INFO progress elapsed_s=20 ops=2451268 ops_s=122556 errors=0
+2026/04/08 06:07:29 INFO progress elapsed_s=25 ops=3062467 ops_s=122496 errors=0
+2026/04/08 06:07:34 INFO progress elapsed_s=30 ops=3682150 ops_s=122737 errors=0
+2026/04/08 06:07:39 INFO progress elapsed_s=35 ops=4303363 ops_s=122951 errors=0
+2026/04/08 06:07:44 INFO progress elapsed_s=40 ops=4924677 ops_s=123116 errors=0
+2026/04/08 06:07:49 INFO progress elapsed_s=45 ops=5537298 ops_s=123050 errors=0
+2026/04/08 06:07:54 INFO progress elapsed_s=50 ops=6151507 ops_s=123029 errors=0
+2026/04/08 06:07:59 INFO progress elapsed_s=55 ops=6771017 ops_s=123107 errors=0
+2026/04/08 06:08:04 INFO progress elapsed_s=60 ops=7381522 ops_s=123023 errors=0
+2026/04/08 06:08:09 INFO progress elapsed_s=65 ops=8001219 ops_s=123095 errors=0
+2026/04/08 06:08:14 INFO progress elapsed_s=70 ops=8616216 ops_s=123088 errors=0
+2026/04/08 06:08:19 INFO progress elapsed_s=75 ops=9230641 ops_s=123074 errors=0
+2026/04/08 06:08:24 INFO progress elapsed_s=80 ops=9850132 ops_s=123126 errors=0
+2026/04/08 06:08:29 INFO progress elapsed_s=85 ops=10450447 ops_s=122946 errors=0
+2026/04/08 06:08:34 INFO progress elapsed_s=90 ops=11041661 ops_s=122685 errors=0
+2026/04/08 06:08:39 INFO progress elapsed_s=95 ops=11627259 ops_s=122390 errors=0
+2026/04/08 06:08:44 INFO progress elapsed_s=100 ops=12213142 ops_s=122131 errors=0
+2026/04/08 06:08:49 INFO progress elapsed_s=105 ops=12807143 ops_s=121972 errors=0
+2026/04/08 06:08:54 INFO progress elapsed_s=110 ops=13399678 ops_s=121814 errors=0
+2026/04/08 06:08:59 INFO progress elapsed_s=115 ops=13990335 ops_s=121655 errors=0
+2026/04/08 06:09:04 INFO progress elapsed_s=120 ops=14546489 ops_s=121220 errors=0
+2026/04/08 06:09:05 INFO stage result workers=100000 total_ops=14546692 ops_per_sec=120902 p50_ms=304.013 p95_ms=399.958 p99_ms=651.592 errors=61607 valkey_cpu_pct=99.5
+2026/04/08 06:09:05 INFO all stages complete
+[Wed Apr 8 06:09:07 UTC 2026] ====== POC 1 COMPLETE ======
+[Wed Apr 8 06:09:07 UTC 2026] ====== POC 3: Best Available ======
+flag provided but not defined: -seats
+Usage of seed:
+  -fragmentation int
+    	0-100: percent of seats to pre-hold (random)
+  -mode string
+    	hset, bitfield, or both (default "both")
+  -valkey-addr string
+    	Valkey address (default "localhost:6379")
+2026/04/08 06:09:07 flag provided but not defined: -seats
+[Wed Apr 8 06:09:07 UTC 2026] Phase A: f=0 workers=1 duration=30s
+2026/04/08 06:09:07 Metrics on :2112/metrics
+2026/04/08 06:09:07 POC 3 load test — mode: best-available, workers: 1, quantity: 2, section: *, fragmentation: 0
+2026/04/08 06:09:12   [5s] ops=17714 ops/s=3543 errors=0
+2026/04/08 06:09:17   [10s] ops=35847 ops/s=3585 errors=0
+2026/04/08 06:09:22   [15s] ops=53775 ops/s=3585 errors=0
+2026/04/08 06:09:27   [20s] ops=71507 ops/s=3575 errors=0
+2026/04/08 06:09:32   [25s] ops=88961 ops/s=3558 errors=0
+2026/04/08 06:09:37 
+=== Results ===
+2026/04/08 06:09:37 ops: 106759 | ops/s: 3559 | p50: 0.0001s | p95: 0.0002s | p99: 0.0002s | err_rate: 0.00%
+flag provided but not defined: -seats
+Usage of seed:
+  -fragmentation int
+    	0-100: percent of seats to pre-hold (random)
+  -mode string
+    	hset, bitfield, or both (default "both")
+  -valkey-addr string
+    	Valkey address (default "localhost:6379")
+2026/04/08 06:09:37 flag provided but not defined: -seats
+[Wed Apr 8 06:09:37 UTC 2026] Phase A: f=25 workers=1 duration=30s
+2026/04/08 06:09:37 Metrics on :2112/metrics
+2026/04/08 06:09:37 POC 3 load test — mode: best-available, workers: 1, quantity: 2, section: *, fragmentation: 25
+2026/04/08 06:09:42   [5s] ops=17679 ops/s=3536 errors=0
+2026/04/08 06:09:47   [10s] ops=35048 ops/s=3505 errors=0
+2026/04/08 06:09:52   [15s] ops=53065 ops/s=3538 errors=0
+2026/04/08 06:09:57   [20s] ops=70666 ops/s=3533 errors=0
+2026/04/08 06:10:02   [25s] ops=88110 ops/s=3524 errors=0
+2026/04/08 06:10:07 
+=== Results ===
+2026/04/08 06:10:07 ops: 105415 | ops/s: 3514 | p50: 0.0001s | p95: 0.0002s | p99: 0.0002s | err_rate: 0.00%
+flag provided but not defined: -seats
+Usage of seed:
+  -fragmentation int
+    	0-100: percent of seats to pre-hold (random)
+  -mode string
+    	hset, bitfield, or both (default "both")
+  -valkey-addr string
+    	Valkey address (default "localhost:6379")
+2026/04/08 06:10:07 flag provided but not defined: -seats
+[Wed Apr 8 06:10:07 UTC 2026] Phase A: f=50 workers=1 duration=30s
+2026/04/08 06:10:07 Metrics on :2112/metrics
+2026/04/08 06:10:07 POC 3 load test — mode: best-available, workers: 1, quantity: 2, section: *, fragmentation: 50
+2026/04/08 06:10:12   [5s] ops=18435 ops/s=3687 errors=0
+2026/04/08 06:10:17   [10s] ops=37773 ops/s=3777 errors=0
+2026/04/08 06:10:22   [15s] ops=54694 ops/s=3646 errors=0
+2026/04/08 06:10:27   [20s] ops=73852 ops/s=3693 errors=0
+2026/04/08 06:10:32   [25s] ops=92378 ops/s=3695 errors=0
+2026/04/08 06:10:37 
+=== Results ===
+2026/04/08 06:10:37 ops: 111005 | ops/s: 3700 | p50: 0.0001s | p95: 0.0002s | p99: 0.0002s | err_rate: 0.00%
+flag provided but not defined: -seats
+Usage of seed:
+  -fragmentation int
+    	0-100: percent of seats to pre-hold (random)
+  -mode string
+    	hset, bitfield, or both (default "both")
+  -valkey-addr string
+    	Valkey address (default "localhost:6379")
+2026/04/08 06:10:37 flag provided but not defined: -seats
+[Wed Apr 8 06:10:37 UTC 2026] Phase A: f=80 workers=1 duration=30s
+2026/04/08 06:10:37 Metrics on :2112/metrics
+2026/04/08 06:10:37 POC 3 load test — mode: best-available, workers: 1, quantity: 2, section: *, fragmentation: 80
+2026/04/08 06:10:42   [5s] ops=19073 ops/s=3815 errors=0
+2026/04/08 06:10:47   [10s] ops=38495 ops/s=3849 errors=0
+2026/04/08 06:10:52   [15s] ops=57717 ops/s=3848 errors=0
+2026/04/08 06:10:57   [20s] ops=77123 ops/s=3856 errors=0
+2026/04/08 06:11:02   [25s] ops=96469 ops/s=3859 errors=0
+2026/04/08 06:11:07 
+=== Results ===
+2026/04/08 06:11:07 ops: 116197 | ops/s: 3873 | p50: 0.0001s | p95: 0.0001s | p99: 0.0002s | err_rate: 0.00%
+flag provided but not defined: -seats
+Usage of seed:
+  -fragmentation int
+    	0-100: percent of seats to pre-hold (random)
+  -mode string
+    	hset, bitfield, or both (default "both")
+  -valkey-addr string
+    	Valkey address (default "localhost:6379")
+2026/04/08 06:11:07 flag provided but not defined: -seats
+[Wed Apr 8 06:11:07 UTC 2026] Phase B: f=50 workers=100 duration=60s
+2026/04/08 06:11:07 Metrics on :2112/metrics
+2026/04/08 06:11:07 POC 3 load test — mode: best-available, workers: 100, quantity: 2, section: *, fragmentation: 50
+2026/04/08 06:11:12   [5s] ops=705848 ops/s=141160 errors=0
+2026/04/08 06:11:17   [10s] ops=1351202 ops/s=135116 errors=0
+2026/04/08 06:11:22   [15s] ops=2060590 ops/s=137368 errors=0
+2026/04/08 06:11:27   [20s] ops=2705750 ops/s=135286 errors=0
+2026/04/08 06:11:32   [25s] ops=3343804 ops/s=133750 errors=0
+2026/04/08 06:11:37   [30s] ops=4002072 ops/s=133401 errors=0
+2026/04/08 06:11:42   [35s] ops=4655062 ops/s=133001 errors=0
+2026/04/08 06:11:47   [40s] ops=5310762 ops/s=132768 errors=0
+2026/04/08 06:11:52   [45s] ops=6005681 ops/s=133459 errors=0
+2026/04/08 06:11:57   [50s] ops=6643468 ops/s=132868 errors=0
+2026/04/08 06:12:02   [55s] ops=7294004 ops/s=132617 errors=0
+2026/04/08 06:12:08 
+=== Results ===
+2026/04/08 06:12:08 ops: 7959629 | ops/s: 132660 | p50: 0.0004s | p95: 0.0006s | p99: 0.0006s | err_rate: 0.00%
+[Wed Apr 8 06:12:08 UTC 2026] Phase B: f=50 workers=1000 duration=60s
+2026/04/08 06:12:08 Metrics on :2112/metrics
+2026/04/08 06:12:08 POC 3 load test — mode: best-available, workers: 1000, quantity: 2, section: *, fragmentation: 50
+2026/04/08 06:12:13   [5s] ops=1078932 ops/s=215617 errors=0
+2026/04/08 06:12:18   [10s] ops=2129534 ops/s=212868 errors=0
+2026/04/08 06:12:23   [15s] ops=3078067 ops/s=205146 errors=0
+2026/04/08 06:12:28   [20s] ops=4083493 ops/s=204125 errors=0
+2026/04/08 06:12:33   [25s] ops=5153288 ops/s=206099 errors=0
+2026/04/08 06:12:38   [30s] ops=6260904 ops/s=208664 errors=0
+2026/04/08 06:12:43   [35s] ops=7353234 ops/s=210069 errors=0
+2026/04/08 06:12:48   [40s] ops=8453860 ops/s=211326 errors=0
+2026/04/08 06:12:53   [45s] ops=9560786 ops/s=212443 errors=0
+2026/04/08 06:12:58   [50s] ops=10659604 ops/s=213174 errors=0
+2026/04/08 06:13:03   [55s] ops=11770503 ops/s=213994 errors=0
+2026/04/08 06:13:09 
+=== Results ===
+2026/04/08 06:13:09 ops: 12869847 | ops/s: 214496 | p50: 0.0024s | p95: 0.0032s | p99: 0.0036s | err_rate: 0.00%
+flag provided but not defined: -seats
+Usage of seed:
+  -fragmentation int
+    	0-100: percent of seats to pre-hold (random)
+  -mode string
+    	hset, bitfield, or both (default "both")
+  -valkey-addr string
+    	Valkey address (default "localhost:6379")
+2026/04/08 06:13:09 flag provided but not defined: -seats
+[Wed Apr 8 06:13:09 UTC 2026] Phase B: f=50 workers=5000 duration=120s
+2026/04/08 06:13:09 Metrics on :2112/metrics
+2026/04/08 06:13:09 POC 3 load test — mode: best-available, workers: 5000, quantity: 2, section: *, fragmentation: 50
+2026/04/08 06:13:14   [5s] ops=994909 ops/s=198175 errors=0
+2026/04/08 06:13:19   [10s] ops=1978803 ops/s=197488 errors=0
+2026/04/08 06:13:24   [15s] ops=3083173 ops/s=205276 errors=0
+2026/04/08 06:13:29   [20s] ops=4199688 ops/s=209774 errors=0
+2026/04/08 06:13:34   [25s] ops=5320331 ops/s=212646 errors=0
+2026/04/08 06:13:39   [30s] ops=6448196 ops/s=214799 errors=0
+2026/04/08 06:13:44   [35s] ops=7580900 ops/s=216475 errors=0
+2026/04/08 06:13:49   [40s] ops=8698669 ops/s=217360 errors=0
+2026/04/08 06:13:54   [45s] ops=9820033 ops/s=218128 errors=0
+2026/04/08 06:13:59   [50s] ops=10929442 ops/s=218503 errors=0
+2026/04/08 06:14:04   [55s] ops=12047394 ops/s=218965 errors=0
+2026/04/08 06:14:09   [60s] ops=13165302 ops/s=219350 errors=0
+2026/04/08 06:14:14   [65s] ops=14177718 ops/s=218052 errors=0
+2026/04/08 06:14:19   [70s] ops=15294481 ops/s=218431 errors=0
+2026/04/08 06:14:24   [75s] ops=16316456 ops/s=217496 errors=0
+2026/04/08 06:14:29   [80s] ops=17418995 ops/s=217683 errors=0
+2026/04/08 06:14:34   [85s] ops=18543797 ops/s=218111 errors=0
+2026/04/08 06:14:39   [90s] ops=19648404 ops/s=218267 errors=0
+2026/04/08 06:14:44   [95s] ops=20776084 ops/s=218650 errors=0
+2026/04/08 06:14:49   [100s] ops=21903038 ops/s=218987 errors=0
+2026/04/08 06:14:54   [105s] ops=23027863 ops/s=219272 errors=0
+2026/04/08 06:14:59   [110s] ops=24127099 ops/s=219298 errors=0
+2026/04/08 06:15:04   [115s] ops=25233844 ops/s=219386 errors=0
+2026/04/08 06:15:13 
+=== Results ===
+2026/04/08 06:15:13 ops: 26340421 | ops/s: 219492 | p50: 0.0098s | p95: 0.0244s | p99: 0.0310s | err_rate: 0.01%
+[Wed Apr 8 06:15:13 UTC 2026] Phase B: f=50 workers=10000 duration=120s
+2026/04/08 06:15:13 Metrics on :2112/metrics
+2026/04/08 06:15:13 POC 3 load test — mode: best-available, workers: 10000, quantity: 2, section: *, fragmentation: 50
+2026/04/08 06:15:18   [5s] ops=1082450 ops/s=214292 errors=0
+2026/04/08 06:15:23   [10s] ops=2212637 ops/s=220147 errors=0
+2026/04/08 06:15:28   [15s] ops=3345557 ops/s=222286 errors=0
+2026/04/08 06:15:33   [20s] ops=4478804 ops/s=223365 errors=0
+2026/04/08 06:15:38   [25s] ops=5608534 ops/s=223885 errors=0
+2026/04/08 06:15:43   [30s] ops=6733981 ops/s=224087 errors=0
+2026/04/08 06:15:48   [35s] ops=7863053 ops/s=224334 errors=0
+2026/04/08 06:15:53   [40s] ops=8935581 ops/s=223107 errors=0
+2026/04/08 06:15:58   [45s] ops=9920814 ops/s=220214 errors=0
+2026/04/08 06:16:03   [50s] ops=10903890 ops/s=217857 errors=0
+2026/04/08 06:16:08   [55s] ops=11894664 ops/s=216068 errors=0
+2026/04/08 06:16:13   [60s] ops=12872924 ops/s=214368 errors=0
+2026/04/08 06:16:18   [65s] ops=13864140 ops/s=213126 errors=0
+2026/04/08 06:16:23   [70s] ops=14848108 ops/s=211962 errors=0
+2026/04/08 06:16:28   [75s] ops=15838238 ops/s=211031 errors=0
+2026/04/08 06:16:33   [80s] ops=16847034 ops/s=210455 errors=0
+2026/04/08 06:16:38   [85s] ops=17853445 ops/s=209913 errors=0
+2026/04/08 06:16:43   [90s] ops=18914789 ops/s=210046 errors=0
+2026/04/08 06:16:48   [95s] ops=20032380 ops/s=210755 errors=0
+2026/04/08 06:16:53   [100s] ops=21167934 ops/s=211571 errors=0
+2026/04/08 06:16:58   [105s] ops=22303943 ops/s=212316 errors=0
+2026/04/08 06:17:03   [110s] ops=23440195 ops/s=212995 errors=0
+2026/04/08 06:17:08   [115s] ops=24545204 ops/s=213342 errors=0
+2026/04/08 06:17:17 
+=== Results ===
+2026/04/08 06:17:17 ops: 25671840 | ops/s: 213899 | p50: 0.0221s | p95: 0.0447s | p99: 0.0696s | err_rate: 0.02%
+flag provided but not defined: -seats
+Usage of seed:
+  -fragmentation int
+    	0-100: percent of seats to pre-hold (random)
+  -mode string
+    	hset, bitfield, or both (default "both")
+  -valkey-addr string
+    	Valkey address (default "localhost:6379")
+2026/04/08 06:17:17 flag provided but not defined: -seats
+[Wed Apr 8 06:17:17 UTC 2026] Phase C: f=80 workers=10000 duration=120s
+2026/04/08 06:17:17 Metrics on :2112/metrics
+2026/04/08 06:17:17 POC 3 load test — mode: best-available, workers: 10000, quantity: 2, section: *, fragmentation: 80
+2026/04/08 06:17:22   [5s] ops=1149550 ops/s=227902 errors=0
+2026/04/08 06:17:27   [10s] ops=2287225 ops/s=227726 errors=0
+2026/04/08 06:17:32   [15s] ops=3421551 ops/s=227436 errors=0
+2026/04/08 06:17:37   [20s] ops=4553485 ops/s=227177 errors=0
+2026/04/08 06:17:42   [25s] ops=5685579 ops/s=227026 errors=0
+2026/04/08 06:17:47   [30s] ops=6793729 ops/s=226128 errors=0
+2026/04/08 06:17:52   [35s] ops=7892203 ops/s=225210 errors=0
+2026/04/08 06:17:57   [40s] ops=9028859 ops/s=225474 errors=0
+2026/04/08 06:18:02   [45s] ops=10157210 ops/s=225497 errors=0
+2026/04/08 06:18:07   [50s] ops=11290305 ops/s=225607 errors=0
+2026/04/08 06:18:12   [55s] ops=12416261 ops/s=225569 errors=0
+2026/04/08 06:18:17   [60s] ops=13550783 ops/s=225680 errors=0
+2026/04/08 06:18:22   [65s] ops=14692131 ops/s=225881 errors=0
+2026/04/08 06:18:27   [70s] ops=15816127 ops/s=225803 errors=0
+2026/04/08 06:18:32   [75s] ops=16949135 ops/s=225857 errors=0
+2026/04/08 06:18:37   [80s] ops=18088102 ops/s=225976 errors=0
+2026/04/08 06:18:42   [85s] ops=19227608 ops/s=226091 errors=0
+2026/04/08 06:18:47   [90s] ops=20309086 ops/s=225547 errors=0
+2026/04/08 06:18:52   [95s] ops=21444892 ops/s=225632 errors=0
+2026/04/08 06:18:57   [100s] ops=22579234 ops/s=225692 errors=0
+2026/04/08 06:19:02   [105s] ops=23709823 ops/s=225713 errors=0
+2026/04/08 06:19:07   [110s] ops=24813233 ops/s=225485 errors=0
+2026/04/08 06:19:12   [115s] ops=25950481 ops/s=225570 errors=0
+2026/04/08 06:19:20 
+=== Results ===
+2026/04/08 06:19:20 ops: 27072403 | ops/s: 225569 | p50: 0.0221s | p95: 0.0401s | p99: 0.0626s | err_rate: 0.02%
+flag provided but not defined: -seats
+Usage of seed:
+  -fragmentation int
+    	0-100: percent of seats to pre-hold (random)
+  -mode string
+    	hset, bitfield, or both (default "both")
+  -valkey-addr string
+    	Valkey address (default "localhost:6379")
+2026/04/08 06:19:20 flag provided but not defined: -seats
+[Wed Apr 8 06:19:20 UTC 2026] Phase D: qty=1 workers=5000 duration=60s
+2026/04/08 06:19:20 Metrics on :2112/metrics
+2026/04/08 06:19:20 POC 3 load test — mode: best-available, workers: 5000, quantity: 1, section: *, fragmentation: 50
+2026/04/08 06:19:25   [5s] ops=1202963 ops/s=239485 errors=0
+2026/04/08 06:19:30   [10s] ops=2396374 ops/s=239085 errors=0
+2026/04/08 06:19:35   [15s] ops=3591917 ops/s=239087 errors=0
+2026/04/08 06:19:40   [20s] ops=4785614 ops/s=238999 errors=0
+2026/04/08 06:19:45   [25s] ops=5980229 ops/s=238985 errors=0
+2026/04/08 06:19:50   [30s] ops=7171246 ops/s=238858 errors=0
+2026/04/08 06:19:55   [35s] ops=8357653 ops/s=238632 errors=0
+2026/04/08 06:20:00   [40s] ops=9550260 ops/s=238619 errors=0
+2026/04/08 06:20:05   [45s] ops=10736553 ops/s=238468 errors=0
+2026/04/08 06:20:10   [50s] ops=11928907 ops/s=238468 errors=0
+2026/04/08 06:20:15   [55s] ops=13107156 ops/s=238212 errors=0
+2026/04/08 06:20:22 
+=== Results ===
+2026/04/08 06:20:22 ops: 14293090 | ops/s: 238190 | p50: 0.0095s | p95: 0.0191s | p99: 0.0262s | err_rate: 0.02%
+[Wed Apr 8 06:20:22 UTC 2026] Phase D: qty=2 workers=5000 duration=60s
+2026/04/08 06:20:22 Metrics on :2112/metrics
+2026/04/08 06:20:22 POC 3 load test — mode: best-available, workers: 5000, quantity: 2, section: *, fragmentation: 50
+2026/04/08 06:20:27   [5s] ops=1098400 ops/s=218876 errors=0
+2026/04/08 06:20:32   [10s] ops=2220305 ops/s=221624 errors=0
+2026/04/08 06:20:37   [15s] ops=3341765 ops/s=222508 errors=0
+2026/04/08 06:20:42   [20s] ops=4409059 ops/s=220247 errors=0
+2026/04/08 06:20:47   [25s] ops=5534654 ops/s=221221 errors=0
+2026/04/08 06:20:52   [30s] ops=6653749 ops/s=221656 errors=0
+2026/04/08 06:20:57   [35s] ops=7766927 ops/s=221796 errors=0
+2026/04/08 06:21:02   [40s] ops=8873782 ops/s=221743 errors=0
+2026/04/08 06:21:07   [45s] ops=9983510 ops/s=221763 errors=0
+2026/04/08 06:21:12   [50s] ops=11112683 ops/s=222171 errors=0
+2026/04/08 06:21:17   [55s] ops=12240775 ops/s=222485 errors=0
+2026/04/08 06:21:24 
+=== Results ===
+2026/04/08 06:21:24 ops: 13346715 | ops/s: 222419 | p50: 0.0101s | p95: 0.0220s | p99: 0.0267s | err_rate: 0.02%
+[Wed Apr 8 06:21:24 UTC 2026] Phase D: qty=4 workers=5000 duration=60s
+2026/04/08 06:21:24 Metrics on :2112/metrics
+2026/04/08 06:21:24 POC 3 load test — mode: best-available, workers: 5000, quantity: 4, section: *, fragmentation: 50
+2026/04/08 06:21:29   [5s] ops=996763 ops/s=198320 errors=0
+2026/04/08 06:21:34   [10s] ops=2120424 ops/s=211483 errors=0
+2026/04/08 06:21:39   [15s] ops=3241037 ops/s=215694 errors=0
+2026/04/08 06:21:44   [20s] ops=4325674 ops/s=216002 errors=0
+2026/04/08 06:21:49   [25s] ops=5282488 ops/s=211078 errors=0
+2026/04/08 06:21:54   [30s] ops=6260544 ops/s=208504 errors=0
+2026/04/08 06:21:59   [35s] ops=7300860 ops/s=208441 errors=0
+2026/04/08 06:22:04   [40s] ops=8405939 ops/s=210009 errors=0
+2026/04/08 06:22:09   [45s] ops=9513612 ops/s=211291 errors=0
+2026/04/08 06:22:14   [50s] ops=10624994 ops/s=212387 errors=0
+2026/04/08 06:22:19   [55s] ops=11735285 ops/s=213266 errors=0
+2026/04/08 06:22:26 
+=== Results ===
+2026/04/08 06:22:26 ops: 12828362 | ops/s: 213788 | p50: 0.0099s | p95: 0.0242s | p99: 0.0305s | err_rate: 0.02%
+[Wed Apr 8 06:22:26 UTC 2026] Phase D: qty=6 workers=5000 duration=60s
+2026/04/08 06:22:26 Metrics on :2112/metrics
+2026/04/08 06:22:26 POC 3 load test — mode: best-available, workers: 5000, quantity: 6, section: *, fragmentation: 50
+2026/04/08 06:22:31   [5s] ops=1091975 ops/s=217307 errors=0
+2026/04/08 06:22:36   [10s] ops=2212430 ops/s=220700 errors=0
+2026/04/08 06:22:41   [15s] ops=3336021 ops/s=222040 errors=0
+2026/04/08 06:22:46   [20s] ops=4463902 ops/s=222923 errors=0
+2026/04/08 06:22:51   [25s] ops=5655861 ops/s=226014 errors=0
+2026/04/08 06:22:56   [30s] ops=6844797 ops/s=227974 errors=0
+2026/04/08 06:23:01   [35s] ops=7999182 ops/s=228387 errors=0
+2026/04/08 06:23:06   [40s] ops=8936678 ops/s=223281 errors=0
+2026/04/08 06:23:11   [45s] ops=9867695 ops/s=219161 errors=0
+2026/04/08 06:23:16   [50s] ops=10821575 ops/s=216322 errors=0
+2026/04/08 06:23:21   [55s] ops=11767520 ops/s=213860 errors=0
+2026/04/08 06:23:27 
+=== Results ===
+2026/04/08 06:23:27 ops: 12687395 | ops/s: 211433 | p50: 0.0108s | p95: 0.0212s | p99: 0.0300s | err_rate: 0.02%
+[Wed Apr 8 06:23:28 UTC 2026] Phase D: qty=8 workers=5000 duration=60s
+2026/04/08 06:23:28 Metrics on :2112/metrics
+2026/04/08 06:23:28 POC 3 load test — mode: best-available, workers: 5000, quantity: 8, section: *, fragmentation: 50
+2026/04/08 06:23:33   [5s] ops=947991 ops/s=188368 errors=0
+2026/04/08 06:23:38   [10s] ops=1889112 ops/s=188300 errors=0
+2026/04/08 06:23:43   [15s] ops=2831948 ops/s=188392 errors=0
+2026/04/08 06:23:48   [20s] ops=3744046 ops/s=186896 errors=0
+2026/04/08 06:23:53   [25s] ops=4679470 ops/s=186936 errors=0
+2026/04/08 06:23:58   [30s] ops=5615697 ops/s=186989 errors=0
+2026/04/08 06:24:03   [35s] ops=6554786 ops/s=187107 errors=0
+2026/04/08 06:24:08   [40s] ops=7583511 ops/s=189435 errors=0
+2026/04/08 06:24:13   [45s] ops=8769176 ops/s=194731 errors=0
+2026/04/08 06:24:18   [50s] ops=9956245 ops/s=198995 errors=0
+2026/04/08 06:24:23   [55s] ops=11151102 ops/s=202627 errors=0
+2026/04/08 06:24:29 
+=== Results ===
+2026/04/08 06:24:29 ops: 12324326 | ops/s: 205393 | p50: 0.0114s | p95: 0.0217s | p99: 0.0280s | err_rate: 0.00%
+[Wed Apr 8 06:24:31 UTC 2026] ====== POC 3 COMPLETE ======
+[Wed Apr 8 06:24:31 UTC 2026] === SPEC RERUN DONE ===
