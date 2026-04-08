@@ -3,27 +3,16 @@ services:
     image: centrifugo/centrifugo:v5
     container_name: centrifugo
     command: centrifugo -c /centrifugo/config.json
-    ports:
-      - "8000:8000"
-      - "9000:9000"
+    network_mode: host
     volumes:
       - ./cmd/centrifugo/config.json:/centrifugo/config.json
-    depends_on:
-      - redis
-
-  redis:
-    image: redis:7-alpine
-    container_name: centrifugo-redis
-    ports:
-      - "6379:6379"
-    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
 
   prometheus:
     image: prom/prometheus:v2.53.0
     container_name: prometheus
-    ports:
-      - "9090:9090"
+    network_mode: host
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--web.listen-address=:9090'
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
-    depends_on:
-      - centrifugo

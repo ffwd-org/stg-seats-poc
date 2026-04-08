@@ -1,7 +1,12 @@
 #!/bin/bash
 # startup-script for WS/Centrifugo service node (Cluster B)
 # Phase 1: runs Go WS server (POC 2), Phase 2: swaps to Centrifugo (POC 5)
-set -euo pipefail
+#
+# Day 2 lessons applied:
+#   - set -uo (no -e) to avoid premature exit on kill/grep failures
+#   - HOME/GOPATH/GOMODCACHE set explicitly for root
+#   - Centrifugo uses --network=host (no bridge overhead for 250K conns)
+set -uo pipefail
 exec > >(tee /var/log/poc-startup.log) 2>&1
 
 ZONE=$(curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/zone | awk -F/ '{print $NF}')
@@ -21,6 +26,7 @@ sysctl -w net.core.netdev_max_backlog=65535
 sysctl -w net.core.rmem_max=16777216
 sysctl -w net.core.wmem_max=16777216
 swapoff -a
+echo "[$(date)] OS tuning done"
 
 # --- Install Docker + Go ---
 apt-get update -qq
@@ -28,8 +34,14 @@ apt-get install -y -qq docker.io docker-compose-v2 git
 systemctl enable docker && systemctl start docker
 
 curl -sL https://go.dev/dl/go1.24.2.linux-amd64.tar.gz | tar -C /usr/local -xz
-export PATH=$PATH:/usr/local/go/bin
-echo 'export PATH=$PATH:/usr/local/go/bin' >> /etc/profile.d/go.sh
+
+# Day 2 lesson: must set these explicitly for root user
+export PATH=$PATH:/usr/local/go/bin:/root/go/bin
+export HOME=/root
+export GOPATH=/root/go
+export GOMODCACHE=/root/go/pkg/mod
+mkdir -p "$GOPATH" "$GOMODCACHE"
+echo "[$(date)] Docker + Go ready ($(go version))"
 
 # --- Clone repo ---
 cd /opt
@@ -62,12 +74,15 @@ done
 
 # --- Phase 2: Stop Go WS, start Centrifugo (POC 5) ---
 echo "[$(date)] Swapping to Centrifugo..."
-kill $WS_PID 2>/dev/null; wait $WS_PID 2>/dev/null || true
+kill $WS_PID 2>/dev/null || true
+wait $WS_PID 2>/dev/null || true
 
-cd /opt/stg-seats-poc/poc-5-edge-offload
-docker compose up -d
+# Run Centrifugo with --network=host (avoids bridge NAT overhead for 250K connections)
+docker run -d --name centrifugo --network=host \
+  -v /opt/stg-seats-poc/poc-5-edge-offload/cmd/centrifugo/config.json:/centrifugo/config.json \
+  centrifugo/centrifugo:v5 centrifugo -c /centrifugo/config.json
 sleep 5
-echo "[$(date)] Centrifugo running on :8000"
+echo "[$(date)] Centrifugo running on :8000 (--network=host)"
 
 # Signal ready for POC 5
 gcloud compute instances add-metadata "$INSTANCE" --zone="$ZONE" --metadata=ready-poc5=true

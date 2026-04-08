@@ -46,8 +46,13 @@ gsutil -m cp -r "$BUCKET/cluster-b/" ./results/day3/ 2>&1 | tail -5
 echo "Results in ./results/day3/"
 
 echo ""
-read -p "Tear down Cluster B VMs? [y/N] " -n 1 -r
-echo ""
-[[ $REPLY =~ ^[Yy]$ ]] && "$SCRIPT_DIR/teardown-gcp.sh"
+# Day 2 lesson: interactive read breaks background execution
+# Pass --teardown to auto-teardown, otherwise manual
+if [ "${1:-}" = "--teardown" ]; then
+  "$SCRIPT_DIR/teardown-gcp.sh"
+else
+  echo "VMs still running. Tear down manually:"
+  echo "  $SCRIPT_DIR/teardown-gcp.sh"
+fi
 
 echo "=== Day 3 complete ==="
