@@ -39,8 +39,12 @@ echo "[$(date)] Docker ready"
 if ! command -v go &>/dev/null; then
   curl -sL https://go.dev/dl/go1.24.2.linux-amd64.tar.gz | tar -C /usr/local -xz
   echo 'export PATH=$PATH:/usr/local/go/bin' >> /etc/profile.d/go.sh
-  export PATH=$PATH:/usr/local/go/bin
 fi
+export PATH=$PATH:/usr/local/go/bin:/root/go/bin
+export HOME=/root
+export GOPATH=/root/go
+export GOMODCACHE=/root/go/pkg/mod
+mkdir -p "$GOPATH" "$GOMODCACHE"
 echo "[$(date)] Go $(go version) ready"
 
 # --- Clone repo ---
@@ -77,8 +81,8 @@ VALKEY_IP=$(gcloud compute instances describe poc-valkey \
   --zone="$ZONE" --format='value(networkInterfaces[0].networkIP)')
 echo "[$(date)] Valkey IP: $VALKEY_IP"
 
-# --- Update Prometheus to scrape Valkey exporter ---
-cat > /opt/stg-seats-poc/infra/prometheus-runtime.yml <<PROMEOF
+# --- Update Prometheus config with Valkey target and restart ---
+cat > /opt/stg-seats-poc/infra/prometheus.yml <<PROMEOF
 global:
   scrape_interval: 5s
 scrape_configs:
@@ -89,8 +93,10 @@ scrape_configs:
     static_configs:
       - targets: ['${VALKEY_IP}:9121']
 PROMEOF
-docker cp /opt/stg-seats-poc/infra/prometheus-runtime.yml "$(docker ps -qf name=prometheus)":/etc/prometheus/prometheus.yml
-docker restart "$(docker ps -qf name=prometheus)" || true
+cd /opt/stg-seats-poc/infra
+docker compose -f docker-compose.metrics.yml down
+docker compose -f docker-compose.metrics.yml up -d
+echo "[$(date)] Prometheus restarted with Valkey target"
 
 # ============================================================
 # POC 1: Valkey Contention (HSET vs BITFIELD)

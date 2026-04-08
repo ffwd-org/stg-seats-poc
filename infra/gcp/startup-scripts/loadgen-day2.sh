@@ -42,9 +42,13 @@ fi
 if ! command -v go &>/dev/null; then
   curl -sL https://go.dev/dl/go1.24.2.linux-amd64.tar.gz | tar -C /usr/local -xz
   echo 'export PATH=$PATH:/usr/local/go/bin:/root/go/bin' >> /etc/profile.d/go.sh
-  export PATH=$PATH:/usr/local/go/bin:/root/go/bin
 fi
-echo "[$(date)] Docker + Go ready"
+export PATH=$PATH:/usr/local/go/bin:/root/go/bin
+export HOME=/root
+export GOPATH=/root/go
+export GOMODCACHE=/root/go/pkg/mod
+mkdir -p "$GOPATH" "$GOMODCACHE"
+echo "[$(date)] Docker + Go ready ($(go version))"
 
 # --- Clone repo ---
 cd /opt
