@@ -116,15 +116,16 @@ func run(args []string) error {
 }
 
 type stageResult struct {
-	Workers      int
-	DurationSec  float64
-	TotalOps     int64
-	OpsPerSec    float64
-	P50Ms        float64
-	P95Ms        float64
-	P99Ms        float64
-	Errors       int64
-	ValkeyCPUPct float64
+	Workers       int
+	DurationSec   float64
+	TotalOps      int64
+	OpsPerSec     float64
+	P50Ms         float64
+	P95Ms         float64
+	P99Ms         float64
+	Errors        int64
+	ValkeyCPUPct  float64
+	ValkeyMemoryMB float64
 }
 
 type latencyStore struct {
@@ -223,16 +224,20 @@ func runStage(ctx context.Context, client valkey.Client, nWorkers int, scripts *
 
 	metrics.ActiveWorkers.WithLabelValues(pocLabel).Set(0)
 
+	memBytes := getValkeyMemory(ctx, client)
+	memMB := float64(memBytes) / 1024 / 1024
+
 	return stageResult{
-		Workers:      nWorkers,
-		DurationSec:  elapsed.Seconds(),
-		TotalOps:     ops,
-		OpsPerSec:    float64(ops) / elapsed.Seconds(),
-		P50Ms:        p50 * 1000,
-		P95Ms:        p95 * 1000,
-		P99Ms:        p99 * 1000,
-		Errors:       errs,
-		ValkeyCPUPct: cpuPct,
+		Workers:        nWorkers,
+		DurationSec:    elapsed.Seconds(),
+		TotalOps:       ops,
+		OpsPerSec:      float64(ops) / elapsed.Seconds(),
+		P50Ms:          p50 * 1000,
+		P95Ms:          p95 * 1000,
+		P99Ms:          p99 * 1000,
+		Errors:         errs,
+		ValkeyCPUPct:   cpuPct,
+		ValkeyMemoryMB: memMB,
 	}
 }
 
@@ -334,6 +339,22 @@ func loadScripts() (*loadedScripts, error) {
 	}, nil
 }
 
+func getValkeyMemory(ctx context.Context, client valkey.Client) int64 {
+	raw, err := client.Do(ctx, client.B().Arbitrary("INFO", "memory").Build()).ToString()
+	if err != nil {
+		return 0
+	}
+	var usedMemory int64
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "used_memory:") {
+			fmt.Sscanf(strings.TrimPrefix(line, "used_memory:"), "%d", &usedMemory)
+			break
+		}
+	}
+	return usedMemory
+}
+
 func getValkeyCPU(ctx context.Context, client valkey.Client) float64 {
 	raw, err := client.Do(ctx, client.B().Arbitrary("INFO", "cpu").Build()).ToString()
 	if err != nil {
@@ -362,6 +383,7 @@ func printStageResult(r stageResult) {
 		"p99_ms", fmt.Sprintf("%.3f", r.P99Ms),
 		"errors", r.Errors,
 		"valkey_cpu_pct", fmt.Sprintf("%.1f", r.ValkeyCPUPct),
+		"valkey_memory_mb", fmt.Sprintf("%.2f", r.ValkeyMemoryMB),
 	)
 }
 
@@ -381,7 +403,7 @@ func writeCSV(results []stageResult, mode string) {
 	_ = w.Write([]string{
 		"workers", "duration_sec", "total_ops", "ops_per_sec",
 		"p50_latency_ms", "p95_latency_ms", "p99_latency_ms",
-		"errors", "valkey_cpu_pct",
+		"errors", "valkey_cpu_pct", "valkey_memory_mb",
 	})
 	for _, r := range results {
 		_ = w.Write([]string{
@@ -394,6 +416,7 @@ func writeCSV(results []stageResult, mode string) {
 			fmt.Sprintf("%.3f", r.P99Ms),
 			strconv.FormatInt(r.Errors, 10),
 			fmt.Sprintf("%.2f", r.ValkeyCPUPct),
+			fmt.Sprintf("%.2f", r.ValkeyMemoryMB),
 		})
 	}
 	w.Flush()
